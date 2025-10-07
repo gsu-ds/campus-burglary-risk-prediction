@@ -22,7 +22,7 @@ be disproportionately impacted.
 
 ## 🧑‍🚀 Team
 
-We are an interdisciplinary student research team bringing together expertise in <<insert specialties here>>
+We are an student research team bringing together our technical expertise to build models aimed at reduucing burglary risk near Metro Atlanta college campuses.
 
 ### Joshua Pina
 
