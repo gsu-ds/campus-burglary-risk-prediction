@@ -35,8 +35,9 @@ Experienced Program Manager in GovCon and former U.S. Army Combat Medic.<br><br>
 
 ### Harini Mohan
 
---insert words here--
-
+Data Science student graduating Spring 2025 with a strong foundation in statistics and data analytics. 
+Passionate about using data to drive strategic business decisions
+Currently a Business Analyst at Deloitte, where I help design a platform that streamlines workflows and tool adoption across teams. 
 
 ---
 
