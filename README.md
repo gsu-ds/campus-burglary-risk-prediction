@@ -51,7 +51,11 @@ A Senior, Data Science major at Georgia State University passionate about using 
 
 ## Goals
 
---insert goals here--
+- To design and implement a predictive modeling and visualization system that:
+   - Forecasts weekly burglary risk around major Atlanta campuses.
+   - Identifies spatial crime hotspots within a one-mile radius of each campus.
+   - Delivers actionable insights through an interactive dashboard to support proactive safety strategies.
+
 
 ## Infrastructure & Tech Stack
 - Communication Tools: [Slack](https://join.slack.com/t/gsudatascienc-2cp1426/shared_invite/zt-3e29bsar7-I0lsBoRp1i8J1o6TkleC3w)
