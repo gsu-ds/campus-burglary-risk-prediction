@@ -89,6 +89,6 @@ This project uses [GitHub Codespaces](https://github.com/features/codespaces) to
 
 ## Project Website
 
-👉 [Project Page](https://gsu-ds.github.io/)
+👉 [Project Page](https://gsu-ds.github.io/campus-burglary-risk-prediction/)
 
 ---
