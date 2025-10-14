@@ -28,9 +28,9 @@ Experienced Program Manager in GovCon and former U.S. Army Combat Medic.<br><br>
 ### Robin Wu
 
 Data Science student and graduating this December.
+Programming Software: Python, (NumPy, Pandas, Seaborn), C, JavaScript, SQL, R, VBA
+Data Analytics: Tableau, Power BI, Qlik Sense, Qlik View, Google Analytics, Excel, Hadoop
 
-
----
 
 ### Harini Mohan
 
