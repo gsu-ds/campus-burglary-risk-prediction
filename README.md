@@ -27,7 +27,7 @@ Experienced Program Manager in GovCon and former U.S. Army Combat Medic.<br><br>
 
 ### Robin Wu
 
---insert words here--
+Data Science student and graduating this December.
 
 
 ---
