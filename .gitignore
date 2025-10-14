@@ -1,0 +1,13 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dscvenv/
+.ipynb_checkpoints/
