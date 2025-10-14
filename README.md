@@ -42,7 +42,9 @@ Currently a Business Analyst at Deloitte, where I help design a platform that st
 
 ### Gunn Madan
 
---insert words here--
+A Senior, Data Science major at Georgia State University passionate about using data-driven insights to advance technology, safety, and social impact initiatives. Currently a Break Through Tech AI Fellow partnered with Cambio Labs, where I explore applied machine learning and innovation in real-world contexts. My technical experience spans Python, SQL, R, Java, JavaScript, HTML, CSS, Bash, and Swift.
+[![GitHub](https://img.shields.io/badge/GitHub-black?logo=github&logoColor=white)](https://github.com/gunnmadan)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/gunnmadan)
 
 
 ---
