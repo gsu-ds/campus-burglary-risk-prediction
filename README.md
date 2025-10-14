@@ -1,4 +1,3 @@
-
 # Data Science Capstone Project (Fall 2025)
 
 **Predictive Analysis for Campus Safety: Modeling Burglary Risk at Atlanta’s Major Universities**
@@ -55,8 +54,8 @@ Currently a Business Analyst at Deloitte, where I help design a platform that st
 ## Infrastructure & Tech Stack
 - Communication Tools: [Slack](https://join.slack.com/t/gsudatascienc-2cp1426/shared_invite/zt-3e29bsar7-I0lsBoRp1i8J1o6TkleC3w)
 - Version Control System: [GitHub](https://github.com/gsu-ds/campus-burglary-risk-prediction)
-- Software Development/Data Storage Solution: MongoDB (Needs a link)
-- Project Management Tools: GitHub Projects, GitHub Pages, and [Notion](https://www.notion.so/Quick-Links-and-Overview-Capstone-2025-Burglary-Risk-Prediction-27f054e466be80b18b73ec862545c5ed?source=copy_link)
+- Software Development/Data Storage Solution: Frontend: Streamlit, Backend: FastAPI, DB: PostgreSQL
+- Project Management Tools: [GitHub Projects](https://github.com/orgs/gsu-ds/projects/1) + [Notion](https://www.notion.so/Quick-Links-and-Overview-Capstone-2025-Burglary-Risk-Prediction-27f054e466be80b18b73ec862545c5ed?source=copy_link)
 - Document Sharing: [Google Drive](https://drive.google.com/drive/folders/1dYm1BG9t2Ah-jAVDn6VQCJ11P3_9P-fS?usp=drive_link)
 - Experiment Tracking: [W&B](https://wandb.ai/joshuadariuspina)
 
@@ -76,11 +75,14 @@ This project uses [GitHub Codespaces](https://github.com/features/codespaces) to
 
 3. **Activate the environment**  
    When your Codespace starts, you’re ready to run scripts and notebooks immediately.
+   - If (dscvenv) does not show in terminal, follow these steps:
+      - Activate virtual env: (bash)-> source dscvenv/bin/activate or powershell-> ( dscvenv\Activate\scripts)
+      - Use requirements.txt to ensure installations: pip install -r requirements.txt
 
 ---
 
 ## Project Website
 
-👉 --insert GitHub Page here--
+👉 [Project Page](https://gsu-ds.github.io/)
 
 ---
