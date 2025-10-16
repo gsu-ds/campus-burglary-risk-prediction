@@ -12,42 +12,8 @@ incidents that occur within a 1-mile radius of each campus, where we predict tha
 
 We are an student research team bringing together our technical expertise to build models aimed at reduucing burglary risk near Metro Atlanta college campuses.
 
-### Joshua Piña
+Data Science Team (Alphabetically): Gunn Madan, Harini Mohan, Joshua Piña, Yuntian Wu
 
-Data Science Senior graduating December 2025 with plans to pursue MS in Analytics.  
-Background in Python, applied probability & statistics, data analytics, big data programming, and ML.
-Experienced Program Manager in GovCon and former U.S. Army Combat Medic.<br><br>
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://www.github.com/joshuadpina)
-[![GitHub Pages](https://img.shields.io/badge/Josh's-Portfolio-blue)](https://joshuapina.github.io/)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/joshuadpina/)
-
-
-
-
-
-### Robin Wu
-
-Data Science student and graduating this December.
-Programming Software: Python, (NumPy, Pandas, Seaborn), C, JavaScript, SQL, R, VBA
-Data Analytics: Tableau, Power BI, Qlik Sense, Qlik View, Google Analytics, Excel, Hadoop
-
-
-### Harini Mohan
-
-Data Science student graduating Spring 2025 with a strong foundation in statistics and data analytics. 
-Passionate about using data to drive strategic business decisions.
-Currently a Business Analyst at Deloitte, where I help design a platform that streamlines workflows and tool adoption across teams. 
-
----
-
-### Gunn Madan
-
-A Senior, Data Science major at Georgia State University passionate about using data-driven insights to advance technology, safety, and social impact initiatives. Currently a Break Through Tech AI Fellow partnered with Cambio Labs, where I explore applied machine learning and innovation in real-world contexts. My technical experience spans Python, SQL, R, Java, JavaScript, HTML, CSS, Bash, and Swift.
-[![GitHub](https://img.shields.io/badge/GitHub-black?logo=github&logoColor=white)](https://github.com/gunnmadan)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/gunnmadan)
-
-
----
 
 ## Goals
 
