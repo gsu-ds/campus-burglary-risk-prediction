@@ -19,13 +19,6 @@ export default function Home() {
           <h3>Dataset</h3>
           <p>Sources, time windows (2021–2023), pre-processing highlights.</p>
         </li>
-        <li>
-          <h3>Downloads</h3>
-          <p>
-            <a href="https://raw.githubusercontent.com/gsu-ds/campus-burglary-risk-prediction/main/CLEANED_Atlanta_Burglary_Larceny_All.csv" target="_blank" rel="noreferrer">Atlanta Burglary+Larceny (All).csv</a><br/>
-            <a href="https://raw.githubusercontent.com/gsu-ds/campus-burglary-risk-prediction/main/CLEANED_GSU_Burglary_Larceny_1mi.csv" target="_blank" rel="noreferrer">GSU Burglary+Larceny 1mi.csv</a>
-          </p>
-        </li>
       </ul>
     </section>
   );
