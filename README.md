@@ -55,6 +55,6 @@ This project uses [GitHub Codespaces](https://github.com/features/codespaces) to
 
 ## Project Website
 
-👉 [Project Page](https://gsu-ds.github.io/campus-burglary-risk-prediction/)
+👉 [Project Page](https://campus-burglary-risk-prediction-frontend-f413vgv0o.vercel.app/)
 
 ---
