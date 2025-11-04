@@ -1,0 +1,63 @@
+stages:
+  # STAGE 1: Initial Clean (The base step you provided)
+  clean_data_v2:
+    cmd: python src/clean.py
+    deps:
+      - src/clean.py
+      - data/interim/eda_v1/APD_DATA_20:24.csv  # Raw Input Dependency
+    outs:
+      - data/interim/eda_v2/cleaned_full_atl_v2.csv # Output V2
+
+  # STAGE 2: Clean V3
+  clean_data_v3:
+    cmd: python src/clean.py
+    deps:
+      - src/clean.py
+      - data/interim/eda_v2/cleaned_full_atl_v2.csv  # Lineage from Stage 1
+    outs:
+      - data/interim/eda_v3/cleaned_full_atl_v3.csv
+
+  # STAGE 3: Clean V4
+  clean_data_v4:
+    cmd: python src/clean.py
+    deps:
+      - src/clean.py
+      - data/interim/eda_v3/cleaned_full_atl_v3.csv  # Lineage from Stage 2
+    outs:
+      - data/interim/eda_v4/cleaned_full_atl_v4.csv
+
+  # STAGE 4: Clean V5
+  clean_data_v5:
+    cmd: python src/clean.py
+    deps:
+      - src/clean.py
+      - data/interim/eda_v4/cleaned_full_atl_v4.csv  # Lineage from Stage 3
+    outs:
+      - data/interim/eda_v5/cleaned_full_atl_v5.csv
+
+  # STAGE 5: Clean V6
+  clean_data_v6:
+    cmd: python src/clean.py
+    deps:
+      - src/clean.py
+      - data/interim/eda_v5/cleaned_full_atl_v5.csv  # Lineage from Stage 4
+    outs:
+      - data/interim/eda_v6/cleaned_full_atl_v6.csv
+
+  # STAGE 6: Clean V7
+  clean_data_v7:
+    cmd: python src/clean.py
+    deps:
+      - src/clean.py
+      - data/interim/eda_v6/cleaned_full_atl_v6.csv  # Lineage from Stage 5
+    outs:
+      - data/interim/eda_v7/cleaned_full_atl_v7.csv
+
+  # STAGE 7: Final Data Prep (The final output file)
+  final_dataset_prep:
+    cmd: python src/clean.py
+    deps:
+      - src/clean.py
+      - data/interim/eda_v7/cleaned_full_atl_v7.csv  # Lineage from Stage 6
+    outs:
+      - data/processed/crime_dataset.csv
