@@ -1,5 +1,6 @@
 # Data
 /data/
+!data/cleaned_full_atl_v8.csv
 
 # Mac OS-specific storage files
 .DS_Store
@@ -190,4 +191,4 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-/data
+
