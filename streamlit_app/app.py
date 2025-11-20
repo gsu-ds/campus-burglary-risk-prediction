@@ -97,22 +97,16 @@ else:
 
 st.subheader("Spatial view of incidents (by NPU)")
 
-map_data = (
-    df_view
-    .dropna(subset=["lat", "lon", "npu"])
-    .groupby("npu", as_index=False)
-    .agg({
-        "lat": "mean",
-        "lon": "mean"
-    })
-)
+map_source = df_view  
+map_df = map_source[["lat", "lon"]].dropna().rename(columns={"lat": "latitude", "lon": "longitude"})
 
-counts = (
-    df_view
-    .groupby("npu")
-    .size()
-    .reset_index(name="incident_count")
-)
+if map_df.empty:
+    st.info("No locations to show for these filters.")
+else:
+    if len(map_df) > 5000:
+        map_df = map_df.sample(5000, random_state=42)
+
+    st.map(map_df)
 
 map_data = map_data.merge(counts, on="npu", how="left")
 
