@@ -9,7 +9,7 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 import numpy as np
 
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.multioutput import MultiOutputRegressor
 from xgboost import XGBRegressor
 import joblib
@@ -233,16 +233,49 @@ def main():
         columns=target_cols,
         index=y_test.index,
     )
+    # ------------------------------------------------------------------
+    # Metrics: per-horizon RMSE / MAE / R2, plus baseline + skill scores
+    # Baseline definition: naive persistence at each row,
+    # predicting all future horizons equal to the current crime_count.
+    # ------------------------------------------------------------------
+    metrics: dict[str, float] = {}
 
-    metrics = {}
+    baseline_source = test["crime_count"]
+
     for h in HORIZONS:
         col = f"y_h{h}"
 
-        mse = mean_squared_error(y_test[col], y_pred[col])
-        rmse = np.sqrt(mse)
-        mae = mean_absolute_error(y_test[col], y_pred[col])
-        metrics[f"rmse_h{h}"] = float(rmse)
-        metrics[f"mae_h{h}"] = float(mae)
+        y_true = y_test[col]
+        y_hat = y_pred[col]
+        y_base = baseline_source
+
+        mse_model = mean_squared_error(y_true, y_hat)
+        rmse_model = np.sqrt(mse_model)
+        mae_model = mean_absolute_error(y_true, y_hat)
+        r2_model = r2_score(y_true, y_hat)
+
+        mse_base = mean_squared_error(y_true, y_base)
+        rmse_base = np.sqrt(mse_base)
+        mae_base = mean_absolute_error(y_true, y_base)
+        r2_base = r2_score(y_true, y_base)
+
+        metrics[f"rmse_h{h}"] = float(rmse_model)
+        metrics[f"mae_h{h}"] = float(mae_model)
+        metrics[f"r2_h{h}"] = float(r2_model)
+
+        metrics[f"baseline_rmse_h{h}"] = float(rmse_base)
+        metrics[f"baseline_mae_h{h}"] = float(mae_base)
+        metrics[f"baseline_r2_h{h}"] = float(r2_base)
+
+        if rmse_base > 0:
+            metrics[f"skill_rmse_h{h}"] = float(1.0 - rmse_model / rmse_base)
+        else:
+            metrics[f"skill_rmse_h{h}"] = float("nan")
+
+        if mae_base > 0:
+            metrics[f"skill_mae_h{h}"] = float(1.0 - mae_model / mae_base)
+        else:
+            metrics[f"skill_mae_h{h}"] = float("nan")
 
     metrics["rmse_mean"] = float(
         np.mean([metrics[f"rmse_h{h}"] for h in HORIZONS])
@@ -250,9 +283,32 @@ def main():
     metrics["mae_mean"] = float(
         np.mean([metrics[f"mae_h{h}"] for h in HORIZONS])
     )
+    metrics["r2_mean"] = float(
+        np.mean([metrics[f"r2_h{h}"] for h in HORIZONS])
+    )
+
+    metrics["baseline_rmse_mean"] = float(
+        np.mean([metrics[f"baseline_rmse_h{h}"] for h in HORIZONS])
+    )
+    metrics["baseline_mae_mean"] = float(
+        np.mean([metrics[f"baseline_mae_h{h}"] for h in HORIZONS])
+    )
+    metrics["baseline_r2_mean"] = float(
+        np.mean([metrics[f"baseline_r2_h{h}"] for h in HORIZONS])
+    )
+
+    metrics["skill_rmse_mean"] = float(
+        np.nanmean([metrics[f"skill_rmse_h{h}"] for h in HORIZONS])
+    )
+    metrics["skill_mae_mean"] = float(
+        np.nanmean([metrics[f"skill_mae_h{h}"] for h in HORIZONS])
+    )
 
     print("Average RMSE across horizons:", metrics["rmse_mean"])
     print("Average MAE across horizons:", metrics["mae_mean"])
+    print("Average R2 across horizons:", metrics["r2_mean"])
+    print("Average RMSE skill vs baseline:", metrics["skill_rmse_mean"])
+    print("Average MAE skill vs baseline:", metrics["skill_mae_mean"])
 
     wandb.log(metrics)
 
