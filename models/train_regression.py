@@ -222,6 +222,65 @@ def main():
         random_state=42,
     )
 
+    # --------------------------------------------------------------
+    # Rolling / expanding-window validation across years.
+    # Example folds:
+    #   - 2021 train → 2022 validation
+    #   - 2021–2022 train → 2023 validation
+    # These use the same hyperparameters as the final model.
+    # --------------------------------------------------------------
+    years = supervised["hour"].dt.year
+    cv_folds = [
+        ("cv_train_2021_val_2022", [2021], [2022]),
+        ("cv_train_2021_2022_val_2023", [2021, 2022], [2023]),
+    ]
+
+    cv_metrics = {}
+    for fold_name, train_years, val_years in cv_folds:
+        train_mask_cv = years.isin(train_years)
+        val_mask_cv = years.isin(val_years)
+
+        train_cv = supervised.loc[train_mask_cv].copy()
+        val_cv = supervised.loc[val_mask_cv].copy()
+
+        if train_cv.empty or val_cv.empty:
+            continue
+
+        X_train_cv = train_cv[feature_cols]
+        y_train_cv = train_cv[target_cols]
+        X_val_cv = val_cv[feature_cols]
+        y_val_cv = val_cv[target_cols]
+
+        base_model_cv = XGBRegressor(**base_model.get_params())
+        model_cv = MultiOutputRegressor(base_model_cv)
+        model_cv.fit(X_train_cv, y_train_cv)
+
+        y_val_pred = pd.DataFrame(
+            model_cv.predict(X_val_cv),
+            columns=target_cols,
+            index=y_val_cv.index,
+        )
+
+        rmse_list = []
+        mae_list = []
+        r2_list = []
+
+        for h in HORIZONS:
+            col = f"y_h{h}"
+            y_true = y_val_cv[col]
+            y_hat = y_val_pred[col]
+            mse = mean_squared_error(y_true, y_hat)
+            rmse_list.append(float(np.sqrt(mse)))
+            mae_list.append(float(mean_absolute_error(y_true, y_hat)))
+            r2_list.append(float(r2_score(y_true, y_hat)))
+
+        cv_metrics[f"{fold_name}_rmse_mean"] = float(np.mean(rmse_list))
+        cv_metrics[f"{fold_name}_mae_mean"] = float(np.mean(mae_list))
+        cv_metrics[f"{fold_name}_r2_mean"] = float(np.mean(r2_list))
+
+    if cv_metrics:
+        wandb.log(cv_metrics)
+
     model = MultiOutputRegressor(base_model)
 
     # Fit
@@ -320,6 +379,37 @@ def main():
 
     out.to_csv(
         "outputs/hourly_npu_predictions_multi_horizon.csv",
+        index=False,
+    )
+
+    # ------------------------------------------------------------------
+    # Long-form export for Streamlit:
+    # One row per (npu, reference_hour, horizon_hours) containing:
+    # - crime_count_at_reference
+    # - model prediction for that horizon
+    # - naive baseline prediction (persistence)
+    # - forecast_hour = reference_hour + horizon
+    # ------------------------------------------------------------------
+    baseline_aligned = baseline_source.reindex(out.index)
+
+    long_rows = []
+    for h in HORIZONS:
+        df_h = out[["npu", "hour", "crime_count", f"pred_h{h}"]].copy()
+        df_h["horizon_hours"] = h
+        df_h["forecast_hour"] = df_h["hour"] + pd.to_timedelta(h, unit="h")
+        df_h["baseline_pred"] = baseline_aligned.values
+        df_h = df_h.rename(
+            columns={
+                "hour": "reference_hour",
+                "crime_count": "crime_count_at_reference",
+                f"pred_h{h}": "pred_model",
+            }
+        )
+        long_rows.append(df_h)
+
+    long_df = pd.concat(long_rows, ignore_index=True)
+    long_df.to_csv(
+        "outputs/hourly_npu_predictions_long_for_streamlit.csv",
         index=False,
     )
 
