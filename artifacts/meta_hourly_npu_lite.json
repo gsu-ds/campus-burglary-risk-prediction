@@ -1,0 +1,45 @@
+{
+  "feature_cols": [
+    "crime_count",
+    "hour_of_day",
+    "day_of_week",
+    "month",
+    "is_weekend",
+    "sin_hour",
+    "cos_hour",
+    "sin_dow",
+    "cos_dow",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_6",
+    "lag_12",
+    "lag_24",
+    "roll_mean_3",
+    "roll_mean_6",
+    "roll_mean_12",
+    "roll_mean_24"
+  ],
+  "target_cols": [
+    "y_h1",
+    "y_h2",
+    "y_h3",
+    "y_h6",
+    "y_h12",
+    "y_h24"
+  ],
+  "cutoff": "2024-01-01 00:00:00",
+  "horizons": [
+    1,
+    2,
+    3,
+    6,
+    12,
+    24
+  ],
+  "n_estimators": 250,
+  "max_depth": 5,
+  "learning_rate": 0.05,
+  "subsample": 0.9,
+  "colsample_bytree": 0.9
+}
