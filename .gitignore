@@ -36,6 +36,7 @@ wheels/
 share/python-wheels/
 *.egg-info/
 .installed.cfg
+.github/ISSUE_TEMPLATE
 *.egg
 MANIFEST
 

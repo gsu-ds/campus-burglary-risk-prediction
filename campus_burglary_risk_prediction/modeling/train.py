@@ -4,7 +4,7 @@ from loguru import logger
 from tqdm import tqdm
 import typer
 
-from campus_burglary_risk_prediction.config import MODELS_DIR, PROCESSED_DATA_DIR
+from campus_burglary_risk_prediction.ccds_modeling_template.config import MODELS_DIR, PROCESSED_DATA_DIR
 
 app = typer.Typer()
 

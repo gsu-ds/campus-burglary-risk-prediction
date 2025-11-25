@@ -13,25 +13,27 @@ Models are evaluated using RMSE and MAE to assess their utility for real-world r
 Our final deliverable is an interactive GIS dashboard allowing stakeholders to visualize predicted risk levels. By identifying daily and seasonal trends, this tool empowers university administrators, law enforcement, and students to make data-driven decisions regarding patrol staffing and safer housing choices.
 
 
+## Table of Contents
 
-## 🧑‍🚀 Team
-
-We are an student research team bringing together our technical expertise to build models aimed at reducing burglary risk near Metro Atlanta college campuses.
-
-Data Science Team (Alphabetically): Gunn Madan, Harini Mohan, Joshua Piña, Yuntian Wu
-
+- [Abstract](#abstract)
+- [Goals](#goals)
+- [Infrastructure & Tech Stack](#infrastructure-and-tech-stack)
+- [Development Environment](#development-environment)
+- [Project Website](#project-website)
+- [Team](#team)
 
 ## Goals
 
-- To design and implement a predictive modeling and visualization system that:
+To design and implement a predictive modeling and visualization system that:
    - Forecasts hourly and daily burglary risk in each of Atlanta's 25 NPU's.
    - Delivers actionable insights through an interactive dashboard to support proactive safety strategies.
 
 
-## Infrastructure & Tech Stack
+## Infrastructure and Tech Stack
 - Communication Tools: [Slack](https://join.slack.com/t/gsudatascienc-2cp1426/shared_invite/zt-3e29bsar7-I0lsBoRp1i8J1o6TkleC3w)
 - Version Control System: [GitHub](https://github.com/gsu-ds/campus-burglary-risk-prediction)
-- Software Development/Data Storage Solution: Streamlit and Supabase(PostgreSQL)
+- Frontend Application: [Streamlit](https://atlanta-risk-prediction.streamlit.app/)
+- Database: [Supabase (PostgreSQL)](https://supabase.com/dashboard/project/huhkmlefmbxxsgewvrgm)
 - Project Management Tools: [GitHub Projects](https://github.com/orgs/gsu-ds/projects/1) + [Notion](https://www.notion.so/Quick-Links-and-Overview-Capstone-2025-Burglary-Risk-Prediction-27f054e466be80b18b73ec862545c5ed?source=copy_link)
 - Document Sharing: [Google Drive](https://drive.google.com/drive/folders/1dYm1BG9t2Ah-jAVDn6VQCJ11P3_9P-fS?usp=drive_link)
 - Experiment Tracking: [W&B](https://wandb.ai/joshuadariuspina)
@@ -40,7 +42,6 @@ Data Science Team (Alphabetically): Gunn Madan, Harini Mohan, Joshua Piña, Yunt
 
 This project uses [GitHub Codespaces](https://github.com/features/codespaces) to ensure a consistent, reproducible development setup.
 
---- 
 
 ### Quick Start
 
@@ -52,14 +53,25 @@ This project uses [GitHub Codespaces](https://github.com/features/codespaces) to
 
 3. **Activate the environment**  
    When your Codespace starts, you’re ready to run scripts and notebooks immediately.
-   - If (dscvenv) does not show in terminal, follow these steps:
-      - Activate virtual env: (bash)-> source dscvenv/bin/activate or powershell-> ( dscvenv\Activate\scripts)
-      - Use requirements.txt to ensure installations: pip install -r requirements.txt
+   - If (dsci_env) does not show in terminal, follow these steps:
+      - Activate virtual env: (bash)-> `source dsci_env/bin/activate` or (powershell)-> `dsci_env\Activate\scripts`
+      - Use requirements.txt to ensure installations: `pip install -r requirements.txt`
+---
+### Repository Structure
 
+[![Uses the Cookiecutter Data Science project template](https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter)](https://cookiecutter-data-science.drivendata.org/)
+[![Deon badge](https://img.shields.io/badge/ethics%20checklist-deon-brightgreen.svg?style=popout-square)](http://deon.drivendata.org/)<br>
+> This project uses `Cookiecutter Data Science v2` for repository structure and `deon` for ethical guidelines and considerations.
 ---
 
 ## Project Website
 
-👉 [Project Page (New Application Coming Soon)](https://google.com)
+👉 [Application (pre-release)](https://atlanta-risk-prediction.streamlit.app/)
+
+---
+
+## Team
+**DSCF_Group 3:** Gunn Madan, Harini Mohan, Joshua Piña, Yuntian Wu
+> We are a student research team bringing together our technical expertise to build models aimed at reducing burglary risk near Metro Atlanta college campuses. The team is listed alphabetically.
 
 ---
