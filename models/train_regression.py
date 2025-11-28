@@ -124,6 +124,8 @@ def main():
 
 
     df = pd.read_csv(csv_path, low_memory=False)
+    df.rename(columns={'ReportDate': 'report_date'}, inplace=True)
+    df.rename(columns={'npu_label': 'npu'}, inplace=True)
 
     if "report_date" not in df.columns:
         raise RuntimeError("Expected 'report_date' column in CSV.")
