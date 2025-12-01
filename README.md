@@ -53,8 +53,8 @@ This project uses [GitHub Codespaces](https://github.com/features/codespaces) to
 
 3. **Activate the environment**  
    When your Codespace starts, you’re ready to run scripts and notebooks immediately.
-   - If (dscvenv) does not show in terminal, follow these steps:
-      - Activate virtual env: (bash)-> source dscvenv/bin/activate or powershell-> ( dscvenv\Activate\scripts)
+   - If (dsci_env) does not show in terminal, follow these steps:
+      - Activate virtual env: (bash)-> source dsci_env/bin/activate or powershell-> ( dsci_env\Activate\scripts)
       - Use requirements.txt to ensure installations: pip install -r requirements.txt
 
 ---
