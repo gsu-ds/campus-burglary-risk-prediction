@@ -1,0 +1,56 @@
+
+Baselines:
+- Naive Mean
+- Naive Seasonal (7-day Lag)
+- Historical NPU x TimeBlock Mean
+
+Statistical Baseline:
+- Poisson Regression
+- ARIMA (Expected failure due to 0's)
+
+Statistical Models:
+# Add this to your EDA (02_eda.py)
+def check_excess_zeros(df, threshold=0.7):
+    """
+    Determines if ZIP model is needed vs standard Poisson.
+    """
+    total = len(df)
+    zeros = (df['crime_count'] == 0).sum()
+    zero_pct = zeros / total
+    
+    # Theoretical expectation under Poisson
+    observed_mean = df['crime_count'].mean()
+    expected_zeros_poisson = np.exp(-observed_mean)  # P(X=0) under Poisson
+    
+    console.print(f"\nZero-Inflation Analysis:")
+    console.print(f"Observed zeros: {zero_pct:.1%}")
+    console.print(f"Expected zeros (Poisson): {expected_zeros_poisson:.1%}")
+    
+    if zero_pct > expected_zeros_poisson * 1.5:
+        console.print("[red]⚠ Excess zeros detected! Consider ZIP model.[/red]")
+    else:
+        console.print("[green]✓ Standard Poisson should work.[/green]")
+as
+
+---
+Use the above script to decide if ZIP is needed.
+If <70% zeroes, standard poisson (GLM or XGBoost Poisson) is fine
+if >70% Try ZIP or NegBinom as well
+if zip needed, statsmodels.ZeroInflatedPoisson can be a model.
+
+Split by Years
+
+train = df[df['date'] < '2023-01-01']   # 2021-2022
+val = df[(df['date'] >= '2023-01-01') & (df['date'] < '2024-01-01')]  # 2023
+test = df[df['date'] >= '2024-01-01']   # 2024
+
+train = fitting
+val = tuning
+test = final eval
+
+Metrics:
+
+Primary metric: MAE (most interpretable for stakeholders)
+Secondary metric: RMSE (penalizes big mistakes)
+Skip MAPE: It breaks when actual crime_count = 0 (division by zero)
+Add MASE: Great for saying "Our model is 30% better than naive seasonal"
