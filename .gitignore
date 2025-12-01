@@ -1,6 +1,8 @@
 # Data
 /data/
 !data/cleaned_full_atl_v8.csv
+!data/crime_dataset.csv
+!data/forecast_results_2024.csv
 
 # Mac OS-specific storage files
 .DS_Store
