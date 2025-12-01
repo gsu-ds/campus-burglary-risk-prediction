@@ -1,10 +1,12 @@
-# Data
-# ->  /data/
+# External NIBRS Data
+data/external/nibrs_ga_2021_2024/
 
-# Archive
+# Exclude large interim and processed CSV file's
+data/interim/apd/apd_model_data_target_crimes.csv
+data/processed/apd/target_crimes.csv
 
-/archive/
-
+# Hide Archive
+archive/
 # Mac OS-specific storage files
 .DS_Store
 
