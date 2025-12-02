@@ -31,9 +31,10 @@ Data Science Team (Alphabetically): Gunn Madan, Harini Mohan, Joshua Piña, Yunt
 ## Infrastructure & Tech Stack
 - Communication Tools: [Slack](https://join.slack.com/t/gsudatascienc-2cp1426/shared_invite/zt-3e29bsar7-I0lsBoRp1i8J1o6TkleC3w)
 - Version Control System: [GitHub](https://github.com/gsu-ds/campus-burglary-risk-prediction)
-- Frontend Application: [Streamlit(In Development)](https://atlanta-risk-prediction.streamlit.app) 
+- Frontend Application: [Streamlit](https://atlanta-risk-prediction.streamlit.app) 
+- Dataset: [Kaggle](https://www.kaggle.com/datasets/joshuapina/core-atlanta-burglary-related-crimes-2021-2025)
 - Database: [Supabase(PostgreSQL)](https://supabase.com/dashboard/project/huhkmlefmbxxsgewvrgm/settings/general)
-- Project Management Tools: [GitHub Projects](https://github.com/orgs/gsu-ds/projects/1) + [Notion](https://www.notion.so/Quick-Links-and-Overview-Capstone-2025-Burglary-Risk-Prediction-27f054e466be80b18b73ec862545c5ed?source=copy_link)
+- Project Management Tools: [GitHub Projects](https://github.com/orgs/gsu-ds/projects/1)
 - Document Sharing: [Google Drive](https://drive.google.com/drive/folders/1dYm1BG9t2Ah-jAVDn6VQCJ11P3_9P-fS?usp=drive_link)
 - Experiment Tracking: [W&B](https://wandb.ai/joshuadariuspina-georgia-state-university/atl-crime-hourly-forecast)
 

@@ -1,6 +1,6 @@
 # 📘 Model Card: npu_dense_panel
 
-Generated: **2025-12-02 14:32:12**
+Generated: **2025-12-02 18:55:57**
 
 ## Overview
 This card summarizes model performance on the **npu_dense_panel** dataset, using:

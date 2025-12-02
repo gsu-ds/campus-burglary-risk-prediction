@@ -1,6 +1,6 @@
 # 📘 Model Card: npu_sparse_panel
 
-Generated: **2025-12-02 14:23:50**
+Generated: **2025-12-02 18:46:27**
 
 ## Overview
 This card summarizes model performance on the **npu_sparse_panel** dataset, using:
