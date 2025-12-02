@@ -387,5 +387,18 @@ st.markdown("---")
 st.caption(
     "Built by the GSU Data Science Capstone Group 3 (Fall 2025). Data: APD burglary & larceny reports, weather from Open-Meteo."
 )
+#Mapbox
+MAPBOX_TOKEN = st.secrets.get("MAPBOX_TOKEN")
 
-    
+deck = pdk.Deck(
+    map_style="mapbox://styles/mapbox/light-v9",
+    initial_view_state=pdk.ViewState(
+        latitude=center_lat,
+        longitude=center_lon,
+        zoom=10,
+        pitch=0,
+    ),
+    layers=[ ... ],
+    tooltip={"text": "NPU {npu}\nIncidents: {incident_count}"},
+    mapbox_key=MAPBOX_TOKEN,
+)
