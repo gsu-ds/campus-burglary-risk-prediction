@@ -3,7 +3,10 @@ data/external/nibrs_ga_2021_2024/
 
 # Exclude large interim and processed CSV file's
 data/interim/apd/apd_model_data_target_crimes.csv
+data/processed/apd/all_apd_crimes.csv
 data/processed/apd/target_crimes.csv
+data/processed/apd/npu_dense_panel.csv
+data/processed/apd/npu_sparse_panel.csv
 
 # Hide Archive
 archive/
