@@ -4,17 +4,44 @@ import pydeck as pdk
 from pathlib import Path
 import numpy as np
 
-MAPBOX_TOKEN = st.secrets.get("MAPBOX_TOKEN", None)
-if MAPBOX_TOKEN:
-    pdk.settings.mapbox_api_key = MAPBOX_TOKEN
-
 st.set_page_config(page_title="Atlanta Burglary Risk", layout="wide")
 
 @st.cache_data
-def load_data():
-    path = Path("data/processed/apd/target_crimes.csv")
-    df = pd.read_csv(path)
+def load_forecasts(model_name="RandomForest"):
+    path = (
+        Path("outputs")
+        / "december"
+        / "cv_results"
+        / "predictions"
+        / f"{model_name}_all_predictions.csv"
+    )
+    if not path.exists():
+        return None
 
+    df = pd.read_csv(path, parse_dates=["hour_ts"])
+    df = df.rename(
+        columns={
+            "hour_ts": "datetime",
+            "burglary_count": "actual",
+            "predicted": "pred",
+        }
+    )
+    return df
+
+@st.cache_data
+def load_data():
+    parquet_path = Path("data/processed/apd/target_crimes.parquet")
+    csv_path = Path("data/processed/apd/target_crimes.csv")
+
+    if parquet_path.exists():
+        df = pd.read_parquet(parquet_path)
+    elif csv_path.exists():
+        df = pd.read_csv(csv_path)
+    else:
+        raise FileNotFoundError(
+            f"Could not find target crimes file at {parquet_path} or {csv_path}"
+        )
+    
     for col in ["datetime", "incident_datetime", "report_date", "ReportDate", "date"]:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col])
@@ -57,6 +84,35 @@ def load_data():
     return df
 
 df = load_data()
+
+@st.cache_data
+def load_forecasts(model_name="RandomForest"):
+    """
+    Load rolling-CV prediction results for a given model.
+
+    """
+    path = (
+        Path("outputs")
+        / "december"
+        / "cv_results"
+        / "predictions"
+        / f"{model_name}_all_predictions.csv"
+    )
+
+    if not path.exists():
+        return None
+
+    df = pd.read_csv(path, parse_dates=["hour_ts"])
+
+    # Standardize column names for plotting
+    df = df.rename(
+        columns={
+            "hour_ts": "datetime",
+            "burglary_count": "actual",
+            "predicted": "pred",
+        }
+    )
+    return df
 
 st.title("Spatiotemporal Forecasting of Burglary Risk in Atlanta")
 
@@ -287,15 +343,18 @@ with tab_explore:
             .reset_index()
             .dropna(subset=["lat", "lon"])
         )
-
         if map_data.empty:
             st.info("No spatial data available for this filter combo.")
         else:
             max_count = max(map_data["incident_count"].max(), 1)
             map_data["risk_level"] = map_data["incident_count"] / max_count
 
-            center_lat = map_data["lat"].mean()
-            center_lon = map_data["lon"].mean()
+            center_lat = float(map_data["lat"].mean())
+            center_lon = float(map_data["lon"].mean())
+
+            map_data_records = map_data.astype(
+                {"lat": float, "lon": float, "incident_count": int, "risk_level": float}
+            ).to_dict(orient="records")
 
             deck = pdk.Deck(
                 map_style="mapbox://styles/mapbox/light-v9",
@@ -308,10 +367,10 @@ with tab_explore:
                 layers=[
                     pdk.Layer(
                         "ScatterplotLayer",
-                        data=map_data,
+                        data=map_data_records,
                         get_position="[lon, lat]",
                         get_radius="200 + risk_level * 1200",
-                        get_fill_color="[255, 140, 0, 160]",
+                        get_fill_color=[255, 140, 0, 160],  # list, not string
                         pickable=True,
                     )
                 ],
@@ -319,6 +378,7 @@ with tab_explore:
             )
 
             st.pydeck_chart(deck)
+
             st.caption(
                 "Each circle represents an NPU. Larger circles = more incidents "
                 "for the current time range. This highlights higher-risk areas."
@@ -354,6 +414,62 @@ train on 2021, validate on early 2022; then extend to 2021–2022 and validate o
 with a final hold-out test on 2024.
         """
     )
+
+    st.markdown("---")
+    st.markdown("### Forecast results & demo")
+
+    # Choose model to visualize
+    model_choice = st.selectbox(
+        "Model to visualize",
+        ["RandomForest", "PoissonGLM", "SeasonalWeekly", "NaiveLastHour", "NaiveMean"],
+        help="These correspond to the models we trained in the 03_model notebook.",
+    )
+
+    forecast_df = load_forecasts(model_choice)
+
+    if forecast_df is None:
+        st.info(
+            "No forecast file found yet for this model. "
+            "Once the team exports *_all_predictions.csv to "
+            "`outputs/december/cv_results/predictions/`, this section will populate."
+        )
+    else:
+        # Overall metrics
+        y_true = forecast_df["actual"].to_numpy()
+        y_pred = forecast_df["pred"].to_numpy()
+
+        overall_rmse = float(np.sqrt(((y_true - y_pred) ** 2).mean()))
+        overall_mae = float(np.abs(y_true - y_pred).mean())
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Overall RMSE", f"{overall_rmse:.2f}")
+        with c2:
+            st.metric("Overall MAE", f"{overall_mae:.2f}")
+
+        # Pick NPU
+        if "npu" in forecast_df.columns:
+            npus_available = sorted(forecast_df["npu"].dropna().unique())
+            npu_choice = st.selectbox("NPU", npus_available)
+        else:
+            npu_choice = None
+
+        if npu_choice is not None:
+            df_npu = (
+                forecast_df[forecast_df["npu"] == npu_choice]
+                .sort_values("datetime")
+                .set_index("datetime")[["actual", "pred"]]
+                .rename(columns={"pred": "predicted"})
+            )
+
+            st.line_chart(df_npu)
+            st.caption(
+                "Actual vs. predicted hourly incident counts for the selected NPU "
+                "across the rolling cross-validation folds."
+            )
+        else:
+            st.info("NPU column not found in forecast file.")
+
 
 with tab_sources:
     st.markdown("## Data & Sources")
@@ -391,24 +507,4 @@ st.markdown("---")
 st.caption(
     "Built by the GSU Data Science Capstone Group 3 (Fall 2025). Data: APD burglary & larceny reports, weather from Open-Meteo."
 )
-#Mapbox
-deck = pdk.Deck(
-    map_style="mapbox://styles/mapbox/light-v9",
-    initial_view_state=pdk.ViewState(
-        latitude=center_lat,
-        longitude=center_lon,
-        zoom=10,
-        pitch=0,
-    ),
-    layers=[  
-        pdk.Layer(
-            "ScatterplotLayer",
-            data=map_data,
-            get_position="[lon, lat]",
-            get_radius="200 + risk_level * 1200",
-            get_fill_color="[255, 140, 0, 160]",
-            pickable=True,
-        )
-    ],
-    tooltip={"text": "NPU {npu}\nIncidents: {incident_count}"},
-)
+
