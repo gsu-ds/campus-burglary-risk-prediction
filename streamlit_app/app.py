@@ -4,6 +4,10 @@ import pydeck as pdk
 from pathlib import Path
 import numpy as np
 
+MAPBOX_TOKEN = st.secrets.get("MAPBOX_TOKEN", None)
+if MAPBOX_TOKEN:
+    pdk.settings.mapbox_api_key = MAPBOX_TOKEN
+
 st.set_page_config(page_title="Atlanta Burglary Risk", layout="wide")
 
 @st.cache_data
@@ -388,8 +392,6 @@ st.caption(
     "Built by the GSU Data Science Capstone Group 3 (Fall 2025). Data: APD burglary & larceny reports, weather from Open-Meteo."
 )
 #Mapbox
-MAPBOX_TOKEN = st.secrets.get("MAPBOX_TOKEN")
-
 deck = pdk.Deck(
     map_style="mapbox://styles/mapbox/light-v9",
     initial_view_state=pdk.ViewState(
@@ -398,7 +400,15 @@ deck = pdk.Deck(
         zoom=10,
         pitch=0,
     ),
-    layers=[ ... ],
+    layers=[  
+        pdk.Layer(
+            "ScatterplotLayer",
+            data=map_data,
+            get_position="[lon, lat]",
+            get_radius="200 + risk_level * 1200",
+            get_fill_color="[255, 140, 0, 160]",
+            pickable=True,
+        )
+    ],
     tooltip={"text": "NPU {npu}\nIncidents: {incident_count}"},
-    mapbox_key=MAPBOX_TOKEN,
 )
