@@ -388,58 +388,90 @@ with tab_models:
     st.markdown("### How the forecasts are generated")
     st.markdown(
         """
-We forecast burglary and larceny risk for each NPU and time-of-day block using a mix of
-simple baselines and more expressive models.
+We compare simple **baseline models** with more expressive models:
 
 **Baselines**
-
-- **24-hour seasonal naïve:** uses the incident count from exactly 24 hours ago as the forecast.
-- **7-day seasonal naïve (168-hour):** uses the incident count from the same hour one week ago.
-
-These give us simple yardsticks to compare against.
+- **NaiveMean** – always predicts the global mean hourly count.
+- **NaiveLastHour** – predicts the last observed value for that NPU.
+- **SeasonalWeekly** – predicts the mean for that NPU and hour-of-week.
 
 **Models**
+- **RandomForest** – tree-based regressor using time, weather, and spatial features.
+- **PoissonGLM** – generalized linear model tailored to count data.
 
-We then train several models on time, weather, and spatial features:
-
-- **XGBoost (Poisson):** gradient-boosted trees tailored to count data.
-- **CatBoost (Poisson):** handles categorical features like NPU and time block efficiently.
-- **LightGBM (Poisson):** a fast gradient-boosted tree model optimized for large datasets.
-- **Zero-Inflated Poisson (ZIP):** a statistical model that accounts for many zero-incident hours.
-- **Prophet:** a decomposable time-series model that captures trend and seasonality.
-
-To respect the time structure, we use **rolling cross-validation**:
-we train on earlier years and validate on future months (for example,
-train on 2021, validate on early 2022; then extend to 2021–2022 and validate on late 2022, etc.),
-with a final hold-out test on 2024.
+Models are evaluated with **rolling time-series cross-validation**:
+we train on earlier hours and validate on later periods (2022–2024),
+then aggregate metrics across folds.
         """
     )
 
-    st.markdown("---")
     st.markdown("### Forecast results & demo")
 
-    # Choose model to visualize
-    model_choice = st.selectbox(
-        "Model to visualize",
-        ["RandomForest", "PoissonGLM", "SeasonalWeekly", "NaiveLastHour", "NaiveMean"],
-        help="These correspond to the models we trained in the 03_model notebook.",
-    )
+    @st.cache_data
+    def load_forecasts():
+        base_dir = Path("outputs/december/cv_results/predictions")
+        if not base_dir.exists():
+            return None
 
-    forecast_df = load_forecasts(model_choice)
+        dfs = []
+        for f in sorted(base_dir.glob("*_all_predictions.csv")):
+            # e.g. RandomForest_all_predictions.csv -> RandomForest
+            model_name = f.stem.replace("_all_predictions", "")
+            df_f = pd.read_csv(f)
+
+            # normalize datetime column name
+            if "hour_ts" in df_f.columns:
+                df_f["datetime"] = pd.to_datetime(df_f["hour_ts"])
+            elif "datetime" in df_f.columns:
+                df_f["datetime"] = pd.to_datetime(df_f["datetime"])
+            else:
+                continue
+
+            # normalize actual / predicted column names
+            rename = {}
+            for c in df_f.columns:
+                cl = c.lower()
+                if cl in ["actual", "y_true", "burglary_count", "count"]:
+                    rename[c] = "actual"
+                if cl in ["pred", "predicted"] or cl.endswith("_pred"):
+                    rename[c] = "predicted"
+            df_f = df_f.rename(columns=rename)
+
+            if "actual" not in df_f.columns or "predicted" not in df_f.columns:
+                continue
+
+            # normalize NPU + model column
+            if "npu" not in df_f.columns and "NPU" in df_f.columns:
+                df_f = df_f.rename(columns={"NPU": "npu"})
+
+            df_f["model"] = model_name
+            dfs.append(df_f)
+
+        if not dfs:
+            return None
+
+        return pd.concat(dfs, ignore_index=True)
+
+    forecast_df = load_forecasts()
 
     if forecast_df is None:
         st.info(
-            "No forecast file found yet for this model. "
-            "Once the team exports *_all_predictions.csv to "
-            "`outputs/december/cv_results/predictions/`, this section will populate."
+            "Forecast results not found yet. Once the modeling notebook exports "
+            "`*_all_predictions.csv` into `outputs/december/cv_results/predictions/`, "
+            "this section will show model performance and interactive forecasts."
         )
     else:
-        # Overall metrics
-        y_true = forecast_df["actual"].to_numpy()
-        y_pred = forecast_df["pred"].to_numpy()
+        # --- model selection ---
+        model_options = sorted(forecast_df["model"].unique())
+        model_choice = st.selectbox("Model to visualize", model_options)
 
-        overall_rmse = float(np.sqrt(((y_true - y_pred) ** 2).mean()))
-        overall_mae = float(np.abs(y_true - y_pred).mean())
+        df_model = forecast_df[forecast_df["model"] == model_choice].copy()
+
+        # overall metrics for the selected model
+        y_true_all = df_model["actual"].to_numpy()
+        y_pred_all = df_model["predicted"].to_numpy()
+        overall_rmse = float(np.sqrt(((y_true_all - y_pred_all) ** 2).mean()))
+        overall_mae = float(np.abs(y_true_all - y_pred_all).mean())
 
         c1, c2 = st.columns(2)
         with c1:
@@ -447,29 +479,33 @@ with a final hold-out test on 2024.
         with c2:
             st.metric("Overall MAE", f"{overall_mae:.2f}")
 
-        # Pick NPU
-        if "npu" in forecast_df.columns:
-            npus_available = sorted(forecast_df["npu"].dropna().unique())
-            npu_choice = st.selectbox("NPU", npus_available)
-        else:
-            npu_choice = None
+        # --- per-NPU time series ---
+        st.markdown("#### Per-NPU forecast")
 
-        if npu_choice is not None:
+        available_npus = sorted(df_model["npu"].dropna().unique())
+        if not available_npus:
+            st.info("No NPU information found in forecast file.")
+        else:
+            npu_choice = st.selectbox("NPU", available_npus, index=0)
+
             df_npu = (
-                forecast_df[forecast_df["npu"] == npu_choice]
+                df_model[df_model["npu"] == npu_choice]
                 .sort_values("datetime")
-                .set_index("datetime")[["actual", "pred"]]
-                .rename(columns={"pred": "predicted"})
             )
 
-            st.line_chart(df_npu)
-            st.caption(
-                "Actual vs. predicted hourly incident counts for the selected NPU "
-                "across the rolling cross-validation folds."
-            )
-        else:
-            st.info("NPU column not found in forecast file.")
+            if df_npu.empty:
+                st.info("No forecast data for this NPU.")
+            else:
+                plot_df = (
+                    df_npu[["datetime", "actual", "predicted"]]
+                    .set_index("datetime")
+                )
 
+                st.line_chart(plot_df)
+                st.caption(
+                    "Actual vs. predicted hourly incident counts for the selected NPU "
+                    "across the rolling cross-validation folds."
+                )
 
 with tab_sources:
     st.markdown("## Data & Sources")
