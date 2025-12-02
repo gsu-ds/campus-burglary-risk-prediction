@@ -120,9 +120,8 @@ nav1, nav2, nav3, nav4, nav5 = st.columns([2, 1, 1, 1, 1])
 with nav2:
     st.markdown("[Project Abstract](https://docs.google.com/document/d/1PreU-Ik2mYIIW4Ja753anvFQFjZGCTmt4FpvtWkVoes/edit?tab=t.5o4kiuwqlscf#heading=h.b7u8zxwyyq9c)")
 with nav3:
-    st.markdown("[Data & Sources](#data--sources)")
+    st.markdown("[Data & Sources](https://www.kaggle.com/datasets/joshuapina/ga-2021-2024-nibrs-dataset-from-fbi-gov/data)")
 with nav4:
-    # TODO: replace with real link when your slides are final
     st.markdown("[Final Presentation](https://docs.google.com/presentation/d/1OrThUntGbi8fWF3Qqyw-xHaza5_X8Qha0KVonl19IV8/edit?slide=id.gc6f80d1ff_0_0#slide=id.gc6f80d1ff_0_0)")
 with nav5:
     st.markdown(
