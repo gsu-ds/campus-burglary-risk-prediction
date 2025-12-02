@@ -1,0 +1,60 @@
+_wandb:
+    value:
+        cli_version: 0.23.0
+        e:
+            b48m18gknrp3pap6ka59ov1ayu8xsqc8:
+                codePath: /workspaces/campus-burglary-risk-prediction/notebooks/03_modelt.ipynb
+                codePathLocal: 03_modelt.ipynb
+                cpu_count: 1
+                cpu_count_logical: 2
+                disk:
+                    /:
+                        total: "33636024320"
+                        used: "17003466752"
+                email: joshuadariuspina@gmail.com
+                executable: /workspaces/campus-burglary-risk-prediction/dsci_env/bin/python
+                git:
+                    commit: d1f1d64f2f7acc197d9a3e161de55540929def3f
+                    remote: https://github.com/gsu-ds/campus-burglary-risk-prediction.git
+                host: codespaces-398714
+                memory:
+                    total: "8330579968"
+                os: Linux-6.8.0-1030-azure-x86_64-with-glibc2.39
+                program: /workspaces/campus-burglary-risk-prediction/notebooks/03_modelt.ipynb
+                python: CPython 3.12.1
+                root: /workspaces/campus-burglary-risk-prediction/notebooks
+                startedAt: "2025-12-02T09:52:32.630117Z"
+                writerId: b48m18gknrp3pap6ka59ov1ayu8xsqc8
+        m: []
+        python_version: 3.12.1
+        t:
+            "1":
+                - 5
+                - 6
+                - 7
+                - 8
+                - 53
+                - 105
+            "2":
+                - 5
+                - 6
+                - 7
+                - 8
+                - 53
+                - 105
+            "3":
+                - 2
+                - 13
+                - 16
+            "4": 3.12.1
+            "5": 0.23.0
+            "8":
+                - 1
+            "10":
+                - 20
+            "12": 0.23.0
+            "13": linux-x86_64
+group:
+    value: rolling_cv
+model:
+    value: XGBRegressor

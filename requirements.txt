@@ -182,3 +182,8 @@ websocket-client==1.9.0
 widgetsnbextension==4.0.15
 xyzservices==2025.11.0
 yarl==1.22.0
+
+catboost
+xgboost
+wandb
+-e

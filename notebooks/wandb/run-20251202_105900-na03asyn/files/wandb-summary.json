@@ -1,0 +1,1 @@
+{"_timestamp":1.7646731646795156e+09,"Mean_MAE":0.2198268048185825,"_runtime":23,"Model":"PoissonGLM","_step":0,"Timestamp":"2025-12-02 10:59:24","Mean_MAPE":15.808711647998836,"Mean_R2":0.05173096260826934,"_wandb":{"runtime":23},"Mean_RMSE":0.3995188435196752}
