@@ -1,0 +1,82 @@
+_wandb:
+    value:
+        cli_version: 0.23.0
+        e:
+            ifyc4ucsvj7uimovun5cvnd5ban9a667:
+                codePath: /workspaces/campus-burglary-risk-prediction/notebooks/03_modelt.ipynb
+                codePathLocal: 03_modelt.ipynb
+                cpu_count: 1
+                cpu_count_logical: 2
+                disk:
+                    /:
+                        total: "33636024320"
+                        used: "17386311680"
+                email: joshuadariuspina@gmail.com
+                executable: /workspaces/campus-burglary-risk-prediction/dsci_env/bin/python
+                git:
+                    commit: 8fde2fd87305167446c03094a9bc743b856a824c
+                    remote: https://github.com/gsu-ds/campus-burglary-risk-prediction.git
+                host: codespaces-398714
+                memory:
+                    total: "8330579968"
+                os: Linux-6.8.0-1030-azure-x86_64-with-glibc2.39
+                program: /workspaces/campus-burglary-risk-prediction/notebooks/03_modelt.ipynb
+                python: CPython 3.12.1
+                root: /workspaces/campus-burglary-risk-prediction/reports/test_results/wandb
+                startedAt: "2025-12-02T11:48:04.531676Z"
+                writerId: ifyc4ucsvj7uimovun5cvnd5ban9a667
+        m: []
+        python_version: 3.12.1
+        t:
+            "1":
+                - 5
+                - 6
+                - 7
+                - 53
+                - 105
+            "2":
+                - 5
+                - 6
+                - 7
+                - 53
+                - 105
+            "3":
+                - 2
+                - 13
+                - 16
+            "4": 3.12.1
+            "5": 0.23.0
+            "8":
+                - 1
+            "10":
+                - 20
+            "12": 0.23.0
+            "13": linux-x86_64
+features:
+    value:
+        - grid_density_7d
+        - npu_crime_avg_30d
+        - temp_f
+        - is_raining
+        - is_hot
+        - is_cold
+        - is_daylight
+        - is_weekend
+        - is_holiday
+        - day_number
+        - month
+        - year
+        - hour_sin
+        - hour_cos
+        - campus_distance_m
+        - location_type_count
+        - dow_Monday
+        - dow_Saturday
+        - dow_Sunday
+        - dow_Thursday
+        - dow_Tuesday
+        - dow_Wednesday
+group:
+    value: rolling_cv
+model:
+    value: SeasonalWeekly

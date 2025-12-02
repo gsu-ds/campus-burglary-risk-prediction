@@ -1,0 +1,1 @@
+{"_timestamp":1.7646745799976552e+09,"Model":"RandomForest","_runtime":124,"_step":0,"Mean_R2":0.7091136176818433,"Mean_MAE":0.07552441194110696,"Mean_RMSE":0.22090246282154521,"Timestamp":"2025-12-02 11:22:59","_wandb":{"runtime":124},"Mean_MAPE":5.398195492523575}

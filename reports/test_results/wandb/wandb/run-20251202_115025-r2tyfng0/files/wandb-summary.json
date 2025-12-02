@@ -1,0 +1,1 @@
+{"Mean_RMSE":0.20578767166149714,"Mean_R2":0.7485559808973181,"Mean_MAE":0.07242521312439235,"_wandb":{"runtime":12},"_step":0,"_timestamp":1.7646762385783036e+09,"Timestamp":"2025-12-02 11:50:38","_runtime":12,"Model":"CatBoost","Mean_MAPE":4.857653035365451}

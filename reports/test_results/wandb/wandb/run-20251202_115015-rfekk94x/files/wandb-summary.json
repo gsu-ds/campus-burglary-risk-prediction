@@ -1,0 +1,1 @@
+{"Mean_MAE":0.08036343194544315,"_step":0,"Mean_RMSE":0.22140337635788965,"Mean_MAPE":5.468779325538469,"_wandb":{"runtime":8},"_runtime":8,"Timestamp":"2025-12-02 11:50:24","Mean_R2":0.7089319825172424,"_timestamp":1.764676224891711e+09,"Model":"XGBRegressor"}

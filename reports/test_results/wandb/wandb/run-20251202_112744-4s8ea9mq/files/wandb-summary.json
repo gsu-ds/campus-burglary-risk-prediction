@@ -1,0 +1,1 @@
+{"Timestamp":"2025-12-02 11:27:49","_step":0,"Mean_R2":-0.29292746467144437,"_runtime":4,"_timestamp":1.764674869454763e+09,"Mean_RMSE":0.46370221083624674,"Mean_MAPE":8.863990232751728,"Mean_MAE":0.1607116967095807,"_wandb":{"runtime":4},"Model":"NaiveLastHour"}
