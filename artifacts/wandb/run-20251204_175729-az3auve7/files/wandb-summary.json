@@ -1,0 +1,1 @@
+{"Mean_R2":0.8793462750060894,"_runtime":0,"Mean_MAE":0.021613293817843427,"_step":0,"_wandb":{"runtime":0},"_timestamp":1.7648710504077232e+09,"Mean_RMSE":0.12486062063365248,"Mean_MAPE":62772.71765870668,"Model":"LinearRegression"}

@@ -1,0 +1,1 @@
+{"_wandb":{"runtime":0},"_step":0,"Mean_MAPE":5.802361732357614e+06,"_runtime":0,"Model":"XGBRegressor","Mean_RMSE":0.06935378757523883,"Mean_R2":0.962676436133816,"_timestamp":1.764871260307842e+09,"Mean_MAE":0.007884539908913002}

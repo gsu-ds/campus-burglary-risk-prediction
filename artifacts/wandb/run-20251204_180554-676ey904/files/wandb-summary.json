@@ -1,0 +1,1 @@
+{"_runtime":2,"_timestamp":1.764871555197197e+09,"Mean_R2":0.97087543392647,"Mean_MAPE":1.2909518591328887e+06,"_step":0,"Mean_RMSE":0.061313299491305186,"_wandb":{"runtime":2},"Mean_MAE":0.006253071805990636,"Model":"CatBoostRegressor"}
