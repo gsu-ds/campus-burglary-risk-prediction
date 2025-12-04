@@ -589,14 +589,16 @@ def run_for_dataset(
         }
         cv_summary_rows.append(row)
 
-        # optional W&B
+
         if HAS_WANDB:
             run = wandb.init(
-                project=WANDB_PROJECT,
-                entity=WANDB_ENTITY,
+                project="Data Science Capstone - Final Tests",
+                entity="joshuadariuspina-georgia-state-university",
+                group="rolling_cv",
                 name=f"{dataset_name}_{model_name}_rolling_cv",
                 config={"dataset": dataset_name, "model": model_name},
                 reinit=True,
+                tags=["crime-forecasting", "capstone", "npu", "time-series"]
             )
             wandb.log(row)
             run.finish()
