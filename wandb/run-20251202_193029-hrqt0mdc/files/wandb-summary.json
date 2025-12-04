@@ -1,0 +1,1 @@
+{"_wandb":{"runtime":0},"_timestamp":1.764703830402911e+09,"_step":0,"Mean_RMSE":0.12486062063365248,"Mean_MAE":0.021613293817843427,"_runtime":0,"Mean_MAPE":62772.71765870668,"Model":"LinearRegression","Mean_R2":0.8793462750060894}

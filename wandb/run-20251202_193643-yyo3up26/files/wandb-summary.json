@@ -1,0 +1,1 @@
+{"_wandb":{"runtime":1},"Mean_RMSE":0.061313299491305186,"_runtime":1,"Model":"CatBoostRegressor","Mean_R2":0.97087543392647,"_step":0,"Mean_MAE":0.006253071805990636,"Mean_MAPE":1.2909518591328887e+06,"_timestamp":1.7647042060750518e+09}

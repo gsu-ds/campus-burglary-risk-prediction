@@ -1,0 +1,56 @@
+_wandb:
+    value:
+        cli_version: 0.23.0
+        e:
+            2h63320vsha6f3lwk9sdrim4ad4y0ilr:
+                codePath: models/multi_models.py
+                codePathLocal: models/multi_models.py
+                cpu_count: 1
+                cpu_count_logical: 2
+                disk:
+                    /:
+                        total: "33636024320"
+                        used: "18639085568"
+                email: joshuadariuspina@gmail.com
+                executable: /workspaces/campus-burglary-risk-prediction/dsci_env/bin/python
+                git:
+                    commit: 77ead4ea0e6d1cc90226377e8f71dda9c7546b84
+                    remote: https://github.com/gsu-ds/campus-burglary-risk-prediction.git
+                host: codespaces-398714
+                memory:
+                    total: "8330579968"
+                os: Linux-6.8.0-1030-azure-x86_64-with-glibc2.39
+                program: /workspaces/campus-burglary-risk-prediction/models/multi_models.py
+                python: CPython 3.12.1
+                root: /workspaces/campus-burglary-risk-prediction
+                startedAt: "2025-12-02T19:30:29.375699Z"
+                writerId: 2h63320vsha6f3lwk9sdrim4ad4y0ilr
+        m: []
+        python_version: 3.12.1
+        t:
+            "1":
+                - 5
+                - 6
+                - 7
+                - 53
+                - 105
+            "2":
+                - 5
+                - 6
+                - 7
+                - 53
+                - 105
+            "3":
+                - 2
+                - 13
+                - 16
+            "4": 3.12.1
+            "5": 0.23.0
+            "10":
+                - 20
+            "12": 0.23.0
+            "13": linux-x86_64
+dataset:
+    value: npu_dense_panel
+model:
+    value: LinearRegression
