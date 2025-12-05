@@ -4,12 +4,14 @@ import pydeck as pdk
 from pathlib import Path
 import numpy as np
 import requests 
+import os # NEW: Import os for environment variables
+from datetime import datetime # FIXED: Missing import
 
 st.set_page_config(page_title="Atlanta Burglary Risk", layout="wide")
 
-# Define the base URL for the API service (using the service name 'api' from docker-compose)
-# This uses the Docker service name, which resolves internally to the API container.
-API_BASE_URL = "http://api:8000"
+# Define the base URL using an environment variable, 
+# falling back to the internal Docker service name (api) if the variable is not set.
+API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 
 @st.cache_data
 def load_data():
@@ -22,8 +24,6 @@ def load_data():
     elif csv_path.exists():
         df = pd.read_csv(csv_path)
     else:
-        # NOTE: This FileNotFoundError will now only trigger if the raw data files are missing, 
-        # not if model files are missing.
         raise FileNotFoundError(
             f"Could not find target crimes file at {parquet_path} or {csv_path}"
         )
@@ -76,11 +76,12 @@ def load_forecasts():
     
     # 1. First, call the API to get a list of available models/datasets
     try:
+        # Use the dynamically set API_BASE_URL
         models_response = requests.get(f"{API_BASE_URL}/models")
         models_response.raise_for_status() # Raises an error for bad status codes
         model_list = models_response.json()
     except requests.exceptions.RequestException as e:
-        st.error(f"Failed to connect to the Model API at {API_BASE_URL}/models. Is the 'api' container running? Error: {e}")
+        st.error(f"Failed to connect to the Model API at {API_BASE_URL}/models. Error: {e}")
         return None
 
     dfs = []
@@ -91,18 +92,15 @@ def load_forecasts():
         model_name = model_info['model_name']
         
         # 2. Call the /forecast endpoint for each best model's historical CV results
-        # We request a high limit to get all CV results for visualization
         forecast_url = f"{API_BASE_URL}/forecast/{dataset_name}/{model_name}?limit=100000" 
         
         try:
-            forecast_response = requests.get(forecast_url, timeout=30) # Add timeout for network safety
+            forecast_response = requests.get(forecast_url, timeout=30) 
             forecast_response.raise_for_status()
             data = forecast_response.json()
             
-            # The API returns a dictionary with a 'predictions' key
             df = pd.DataFrame(data['predictions'])
             
-            # Perform necessary type conversions as data comes in as JSON strings/floats
             df['datetime'] = pd.to_datetime(df['hour_ts'])
             df['actual'] = df['actual'].astype(float)
             df['predicted'] = df['predicted'].astype(float)
@@ -116,7 +114,6 @@ def load_forecasts():
     if not dfs:
         return None
     
-    # 3. Concatenate all historical forecasts for the Streamlit dashboard display
     return pd.concat(dfs, ignore_index=True)
 
 # Load dataframes at the start of the script
@@ -124,8 +121,14 @@ try:
     df = load_data()
 except FileNotFoundError as e:
     st.error(f"Data Loading Error: {e}. Please ensure data files are in the expected location.")
-    df = pd.DataFrame({'year': [datetime.now().year], 'date': [datetime.now().date()]}) # Empty placeholder
-    
+    # Use empty placeholder that includes required columns to prevent downstream crashes
+    df = pd.DataFrame({'year': [datetime.now().year], 'date': [datetime.now().date()], 'npu': ['N/A'], 'time_block': ['N/A']}, index=[0]) 
+except Exception as e:
+    st.error(f"A critical error occurred during raw data processing: {type(e).__name__}: {e}")
+    df = pd.DataFrame({'year': [datetime.now().year], 'date': [datetime.now().date()], 'npu': ['N/A'], 'time_block': ['N/A']}, index=[0]) 
+
+# --- Rest of the Streamlit application logic ---
+
 st.title("Spatiotemporal Forecasting of Burglary Risk in Atlanta")
 
 nav1, nav2, nav3, nav4, nav5 = st.columns([2, 1, 1, 1, 1])
@@ -165,7 +168,7 @@ st.caption(
 st.markdown("---")
 
 # Safe access for metrics, handles case where df is placeholder (empty)
-total_crimes = len(df) if 'year' in df.columns else 0
+total_crimes = len(df) if 'year' in df.columns and len(df) > 1 else 0
 years = f"{df['year'].min()}–{df['year'].max()}" if total_crimes > 0 else "N/A"
 npu_count = df["npu"].nunique() if "npu" in df.columns and total_crimes > 0 else 0
 
@@ -204,7 +207,7 @@ if 'year' in df.columns and total_crimes > 0:
     else:
         df_view = df_year.copy()
 else:
-    # If initial load_data failed, use an empty view
+    # If initial load_data failed, use the placeholder data
     df_view = df
     npu_options = []
     
@@ -220,7 +223,7 @@ has_npu = "npu" in df.columns and 'npu' in df_view.columns
 
 cta_left, cta_right = st.columns([2, 1])
 
-if has_npu and npu_options:
+if has_npu and npu_options and len(npu_options) > 0:
     with cta_left:
         selected_npu_cta = st.selectbox(
             "Focus NPU",
@@ -238,7 +241,7 @@ else:
         )
 
 with cta_right:
-    if time_block_options:
+    if time_block_options and len(time_block_options) > 0:
         selected_tb = st.selectbox(
             "Time-of-day block",
             options=time_block_options,
@@ -502,5 +505,5 @@ model comparison tab to see performance metrics.
     
 st.markdown("---")
 st.caption(
-    "Built by the GSU Data Science Capstone Group 3 (Fall 2024). Data: APD burglary & larceny reports, weather from Open-Meteo."
+    "Built by the GSU Data Science Capstone Group 3 (Fall 2025). Data: APD burglary & larceny reports, weather from Open-Meteo."
 )

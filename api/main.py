@@ -98,7 +98,7 @@ def get_forecast(
     dataset: str,
     model: str,
     npu: Optional[str] = Query(None, description="Filter by NPU"),
-    limit: int = Query(10000, ge=1, le=1000000) # Increased max limit for full dashboard loading
+    limit: int = Query(10000, ge=1, le=1000000) 
 ):
     """Get historical predictions from rolling CV results."""
     
