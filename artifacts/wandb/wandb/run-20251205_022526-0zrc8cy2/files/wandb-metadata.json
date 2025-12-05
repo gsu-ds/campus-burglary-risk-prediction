@@ -1,0 +1,26 @@
+{
+  "os": "Linux-6.8.0-1030-azure-x86_64-with-glibc2.39",
+  "python": "CPython 3.12.1",
+  "startedAt": "2025-12-05T02:25:26.151791Z",
+  "program": "-m atl_model_pipelines.models.rolling_cv",
+  "git": {
+    "remote": "https://github.com/gsu-ds/campus-burglary-risk-prediction.git",
+    "commit": "b46c7dba23e6382fabe40196caec35076372864f"
+  },
+  "email": "joshuadariuspina@gmail.com",
+  "root": "/workspaces/campus-burglary-risk-prediction/artifacts/wandb",
+  "host": "codespaces-398714",
+  "executable": "/workspaces/campus-burglary-risk-prediction/dsci_env/bin/python",
+  "cpu_count": 1,
+  "cpu_count_logical": 2,
+  "disk": {
+    "/": {
+      "total": "33636024320",
+      "used": "25493569536"
+    }
+  },
+  "memory": {
+    "total": "8330579968"
+  },
+  "writerId": "9qlmz1j09awnnilajz34iagdaa6vkajf"
+}

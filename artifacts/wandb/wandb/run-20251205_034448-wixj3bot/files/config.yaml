@@ -1,0 +1,59 @@
+_wandb:
+    value:
+        cli_version: 0.23.0
+        e:
+            j1l4v58ff0d6mrqg8jgc31sg2jl1208c:
+                cpu_count: 1
+                cpu_count_logical: 2
+                disk:
+                    /:
+                        total: "33636024320"
+                        used: "25635962880"
+                email: joshuadariuspina@gmail.com
+                executable: /workspaces/campus-burglary-risk-prediction/dsci_env/bin/python
+                git:
+                    commit: b46c7dba23e6382fabe40196caec35076372864f
+                    remote: https://github.com/gsu-ds/campus-burglary-risk-prediction.git
+                host: codespaces-398714
+                memory:
+                    total: "8330579968"
+                os: Linux-6.8.0-1030-azure-x86_64-with-glibc2.39
+                program: -m atl_model_pipelines.models.rolling_cv
+                python: CPython 3.12.1
+                root: /workspaces/campus-burglary-risk-prediction/artifacts/wandb
+                startedAt: "2025-12-05T03:44:48.947203Z"
+                writerId: j1l4v58ff0d6mrqg8jgc31sg2jl1208c
+        m: []
+        python_version: 3.12.1
+        t:
+            "1":
+                - 5
+                - 6
+                - 7
+                - 53
+                - 105
+            "2":
+                - 5
+                - 6
+                - 7
+                - 53
+                - 105
+            "3":
+                - 2
+                - 13
+                - 16
+                - 62
+            "4": 3.12.1
+            "5": 0.23.0
+            "12": 0.23.0
+            "13": linux-x86_64
+dataset:
+    value: npu_sparse_panel
+date_col:
+    value: hour_ts
+group_col:
+    value: npu
+target_col:
+    value: crime_count
+train_end:
+    value: "2024-01-01"

@@ -2,23 +2,34 @@ version: '3.8'
 
 services:
   streamlit:
-    build: .
+    build: 
+      context: . # Use the root Dockerfile stage for Streamlit
+      dockerfile: Dockerfile
+      target: streamlit-stage 
     container_name: atl-crime-streamlit
     ports:
       - "8501:8501"
+    # Mount volumes for raw data, which Streamlit uses (load_data function)
     volumes:
       - ./data:/app/data
       - ./outputs:/app/outputs
       - ./reports:/app/reports
     command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - api # Streamlit must wait for the API to be available
 
   api:
-    build: .
+    build: 
+      context: . # Use the root Dockerfile stage for API
+      dockerfile: Dockerfile
+      target: api-stage'
     container_name: atl-crime-api
     ports:
       - "8000:8000"
+
+    # which it uses for the /forecast endpoint.
     volumes:
-      - ./data:/app/data
-      - ./outputs:/app/outputs
-      - ./reports:/app/reports
-    command: uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+      - ./artifacts:/app/artifacts # <---  Provides the trained models
+      - ./reports:/app/reports     # <--- Provides the historical CV results for /forecast
+ 
+    command: uvicorn api.api:app --host 0.0.0.0 --port 8000 --workers 1

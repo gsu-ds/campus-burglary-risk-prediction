@@ -3,3 +3,4 @@ pandas
 pydeck
 numpy
 pyarrow
+requests

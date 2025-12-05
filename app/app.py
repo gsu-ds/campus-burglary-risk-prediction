@@ -3,11 +3,17 @@ import pandas as pd
 import pydeck as pdk
 from pathlib import Path
 import numpy as np
+import requests 
 
 st.set_page_config(page_title="Atlanta Burglary Risk", layout="wide")
 
+# Define the base URL for the API service (using the service name 'api' from docker-compose)
+# This uses the Docker service name, which resolves internally to the API container.
+API_BASE_URL = "http://api:8000"
+
 @st.cache_data
 def load_data():
+    """Load raw incident data from local files (needed for exploration charts)."""
     parquet_path = Path("data/processed/apd/target_crimes.parquet")
     csv_path = Path("data/processed/apd/target_crimes.csv")
 
@@ -16,10 +22,13 @@ def load_data():
     elif csv_path.exists():
         df = pd.read_csv(csv_path)
     else:
+        # NOTE: This FileNotFoundError will now only trigger if the raw data files are missing, 
+        # not if model files are missing.
         raise FileNotFoundError(
             f"Could not find target crimes file at {parquet_path} or {csv_path}"
         )
     
+    # Data cleaning/column standardization logic
     for col in ["datetime", "incident_datetime", "report_date", "ReportDate", "date"]:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col])
@@ -63,55 +72,60 @@ def load_data():
 
 @st.cache_data
 def load_forecasts():
-    """Load all model predictions from CV results."""
-    base_dirs = [
-        Path("reports/test_results/npu_sparse_panel/cv_results/predictions"),
-        Path("reports/test_results/target_crimes_panel/cv_results/predictions"),
-        Path("reports/test_results/npu_dense_panel/cv_results/predictions"),
-    ]
+    """Load all historical model predictions from the FastAPI service."""
     
+    # 1. First, call the API to get a list of available models/datasets
+    try:
+        models_response = requests.get(f"{API_BASE_URL}/models")
+        models_response.raise_for_status() # Raises an error for bad status codes
+        model_list = models_response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to connect to the Model API at {API_BASE_URL}/models. Is the 'api' container running? Error: {e}")
+        return None
+
     dfs = []
-    for base_dir in base_dirs:
-        if not base_dir.exists():
-            continue
-
-        for csv_file in sorted(base_dir.glob("*_all_predictions.csv")):
-            model_name = csv_file.stem.replace("_all_predictions", "")
-            dataset_name = base_dir.parent.parent.name
-            
-            try:
-                df = pd.read_csv(csv_file)
-
-                rename_map = {}
-                for col in df.columns:
-                    col_lower = col.lower()
-                    if col_lower in ["hour_ts", "datetime"]:
-                        rename_map[col] = "datetime"
-                    elif col_lower in ["burglary_count", "crime_count", "actual", "y_true"]:
-                        rename_map[col] = "actual"
-                    elif col_lower in ["predicted", "pred"]:
-                        rename_map[col] = "predicted"
-                
-                df = df.rename(columns=rename_map)
-                
-                if "datetime" in df.columns:
-                    df["datetime"] = pd.to_datetime(df["datetime"])
-                
-                df["model"] = model_name
-                df["dataset"] = dataset_name
-                dfs.append(df)
-                
-            except Exception as e:
-                st.warning(f"Failed to load {csv_file.name}: {e}")
-                continue
     
+    # Iterate over the best models reported by the API's /models endpoint
+    for model_info in model_list:
+        dataset_name = model_info['dataset']
+        model_name = model_info['model_name']
+        
+        # 2. Call the /forecast endpoint for each best model's historical CV results
+        # We request a high limit to get all CV results for visualization
+        forecast_url = f"{API_BASE_URL}/forecast/{dataset_name}/{model_name}?limit=100000" 
+        
+        try:
+            forecast_response = requests.get(forecast_url, timeout=30) # Add timeout for network safety
+            forecast_response.raise_for_status()
+            data = forecast_response.json()
+            
+            # The API returns a dictionary with a 'predictions' key
+            df = pd.DataFrame(data['predictions'])
+            
+            # Perform necessary type conversions as data comes in as JSON strings/floats
+            df['datetime'] = pd.to_datetime(df['hour_ts'])
+            df['actual'] = df['actual'].astype(float)
+            df['predicted'] = df['predicted'].astype(float)
+            
+            dfs.append(df)
+            
+        except requests.exceptions.RequestException as e:
+            st.warning(f"Could not fetch historical forecast for {dataset_name}/{model_name}. Error: {e}")
+            continue
+            
     if not dfs:
         return None
     
+    # 3. Concatenate all historical forecasts for the Streamlit dashboard display
     return pd.concat(dfs, ignore_index=True)
 
-df = load_data()
-
+# Load dataframes at the start of the script
+try:
+    df = load_data()
+except FileNotFoundError as e:
+    st.error(f"Data Loading Error: {e}. Please ensure data files are in the expected location.")
+    df = pd.DataFrame({'year': [datetime.now().year], 'date': [datetime.now().date()]}) # Empty placeholder
+    
 st.title("Spatiotemporal Forecasting of Burglary Risk in Atlanta")
 
 nav1, nav2, nav3, nav4, nav5 = st.columns([2, 1, 1, 1, 1])
@@ -150,9 +164,10 @@ st.caption(
 
 st.markdown("---")
 
-total_crimes = len(df)
-years = f"{df['year'].min()}–{df['year'].max()}"
-npu_count = df["npu"].nunique() if "npu" in df.columns else 0
+# Safe access for metrics, handles case where df is placeholder (empty)
+total_crimes = len(df) if 'year' in df.columns else 0
+years = f"{df['year'].min()}–{df['year'].max()}" if total_crimes > 0 else "N/A"
+npu_count = df["npu"].nunique() if "npu" in df.columns and total_crimes > 0 else 0
 
 m1, m2, m3 = st.columns(3)
 m1.metric("Crimes tracked", f"{total_crimes:,}")
@@ -164,30 +179,35 @@ st.markdown("### Explore forecasted risk by NPU & time of day")
 st.sidebar.header("Filters")
 st.sidebar.caption("Filter the dataset by year range and NPU(s).")
 
-year_min, year_max = int(df["year"].min()), int(df["year"].max())
-year_range = st.sidebar.slider(
-    "Year range",
-    min_value=year_min,
-    max_value=year_max,
-    value=(year_min, year_max),
-)
+# Filter logic relies on 'year' and 'npu' existing
+if 'year' in df.columns and total_crimes > 0:
+    year_min, year_max = int(df["year"].min()), int(df["year"].max())
+    year_range = st.sidebar.slider(
+        "Year range",
+        min_value=year_min,
+        max_value=year_max,
+        value=(year_min, year_max),
+    )
+    df_year = df[(df["year"] >= year_range[0]) & (df["year"] <= year_range[1])]
 
-df_year = df[(df["year"] >= year_range[0]) & (df["year"] <= year_range[1])]
+    npu_options = (
+        sorted(df_year["npu"].dropna().unique()) if "npu" in df_year.columns else []
+    )
+    selected_npus = st.sidebar.multiselect(
+        "Neighborhood Planning Units (NPUs)",
+        npu_options,
+        default=npu_options,
+    )
 
-npu_options = (
-    sorted(df_year["npu"].dropna().unique()) if "npu" in df_year.columns else []
-)
-selected_npus = st.sidebar.multiselect(
-    "Neighborhood Planning Units (NPUs)",
-    npu_options,
-    default=npu_options,
-)
-
-if selected_npus:
-    df_view = df_year[df_year["npu"].isin(selected_npus)].copy()
+    if selected_npus:
+        df_view = df_year[df_year["npu"].isin(selected_npus)].copy()
+    else:
+        df_view = df_year.copy()
 else:
-    df_view = df_year.copy()
-
+    # If initial load_data failed, use an empty view
+    df_view = df
+    npu_options = []
+    
 st.sidebar.write(f"Rows in current view: {len(df_view):,}")
 
 time_block_options = (
@@ -196,23 +216,23 @@ time_block_options = (
     else []
 )
 
-has_npu = "npu" in df.columns
+has_npu = "npu" in df.columns and 'npu' in df_view.columns
 
 cta_left, cta_right = st.columns([2, 1])
 
-if has_npu:
+if has_npu and npu_options:
     with cta_left:
         selected_npu_cta = st.selectbox(
             "Focus NPU",
-            npu_options if npu_options else ["(no NPU column)"],
-            index=0 if npu_options else 0,
+            npu_options,
+            index=0,
         )
 else:
     selected_npu_cta = None
     with cta_left:
         st.selectbox(
             "Focus NPU",
-            ["(NPU column not found in dataset)"],
+            ["(NPU data not available)"],
             index=0,
             disabled=True,
         )
@@ -264,8 +284,8 @@ with tab_explore:
 
     st.subheader("Incidents over time")
 
-    if df_view.empty:
-        st.info("No data for this filter combo.")
+    if df_view.empty or len(df_view) <= 1:
+        st.info("No data for this filter combo or insufficient data points.")
     else:
         ts = (
             df_view.groupby("date")
@@ -392,9 +412,10 @@ then aggregate metrics across folds. The best model is selected by CV Mean R².
 
     if forecast_df is None:
         st.info(
-            "Forecast results not found. Run the rolling_cv.py script to generate predictions."
+            "Forecast results not available. Ensure the API container is running and accessible."
         )
     else:
+        # NOTE: This logic now uses the data retrieved from the API
         dataset_options = sorted(forecast_df["dataset"].unique())
         dataset_choice = st.selectbox("Dataset", dataset_options)
         
@@ -420,7 +441,7 @@ then aggregate metrics across folds. The best model is selected by CV Mean R².
 
         available_npus = sorted(df_model["npu"].dropna().unique())
         if not available_npus:
-            st.info("No NPU information found in forecast file.")
+            st.info("No NPU information found in forecast data.")
         else:
             npu_choice = st.selectbox("NPU", available_npus, index=0)
 
@@ -461,19 +482,19 @@ with tab_faq:
     st.markdown("### FAQ")
     st.markdown(
         """
-**What is an NPU?**  
+**What is an NPU?**  
 Neighborhood Planning Units (NPUs) are community planning districts defined by the City of Atlanta.
 We forecast risk at the NPU level to align with how local stakeholders make decisions.
 
-**What does 'risk' mean here?**  
+**What does 'risk' mean here?**  
 We use historical burglary and larceny counts as a proxy for relative risk.
 Higher forecasted counts indicate times and locations where incidents are more likely.
 
-**Can these forecasts be used to predict individual crimes?**  
+**Can these forecasts be used to predict individual crimes?**  
 No. The goal is *strategic* insight (e.g., where/when risk is higher) rather than
 predicting specific incidents or individuals.
 
-**Which model performs best?**  
+**Which model performs best?**  
 CatBoostRegressor typically achieves the best CV R² scores across datasets. Check the
 model comparison tab to see performance metrics.
         """

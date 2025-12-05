@@ -11,7 +11,8 @@ data/processed/**/*.csv
 
 # --- 2. Archive / Artifact folders ---
 archive/
-artifacts/
+artifacts/catboost_info
+artifacts/assorted
 outputs/
 reports/
 test_results/

@@ -1,0 +1,1 @@
+{"_runtime":0,"simple/RMSE":0.38249958486657426,"simple/R2":-0.0009969715792688127,"_step":0,"simple/MAPE":16.79101745461574,"simple/MAE":0.22701953482956916,"_wandb":{"runtime":0},"split":"simple","model":"BaselineMean","_timestamp":1.764901787966779e+09}
