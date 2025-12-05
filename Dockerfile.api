@@ -1,0 +1,29 @@
+# Dockerfile for deploying the FastAPI service ONLY
+FROM python:3.11-slim
+
+# Set the environment to run the application
+WORKDIR /app
+
+# Install build dependencies required for certain Python packages
+RUN apt-get update && apt-get install -y gcc g++ git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install FastAPI dependencies
+COPY api/requirements.txt . 
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy essential application code and artifacts
+COPY ./api ./api
+# Copy essential model artifacts and reports needed for loading in the cloud
+# Render uses these files directly; they are NOT volume mounts.
+COPY ./artifacts ./artifacts
+COPY ./reports ./reports 
+
+ENV PYTHONPATH=/app
+
+# Expose the API port
+EXPOSE 8000
+
+# Command to start the API service (Uvicorn must listen on the exposed port)
+# NOTE: The public URL of the API is needed for Streamlit Cloud, not here.
+CMD ["uvicorn", "api.api:app", "--host", "0.0.0.0", "--port", "8000"]
