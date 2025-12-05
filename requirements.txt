@@ -206,3 +206,5 @@ widgetsnbextension==4.0.15
 xgboost==3.1.2
 xyzservices==2025.11.0
 yarl==1.22.0
+fastapi
+uvicorn[standard]
