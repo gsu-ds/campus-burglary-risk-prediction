@@ -1,136 +1,261 @@
-from pathlib import Path
-from typing import List, Optional
-from .schemas import ForecastRequest
-import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
+from typing import List, Optional, Dict
+from datetime import datetime
+from pathlib import Path
+import pandas as pd
+import joblib
+import json
+import numpy as np
 
-# --- FastAPI app ---
 app = FastAPI(
-    title="Atlanta Burglary Risk API",
-    description="Serve NPU-level burglary/larceny forecasts from the capstone project.",
-    version="1.0.0",
+    title="Atlanta Burglary Prediction API",
+    description="Serve ML predictions for burglary risk across Atlanta NPUs",
+    version="1.0.0"
 )
 
-# --- Paths to prediction CSVs (from your repo structure) ---
-ROOT = Path(__file__).resolve().parents[1]
-PRED_DIR = ROOT / "outputs" / "december" / "cv_results" / "predictions"
+ARTIFACTS_DIR = Path("artifacts")
+TEST_RESULTS_DIR = Path("reports/test_results")
 
-# File names taken from your GitHub tree
-MODEL_FILES = {
-    "NaiveMean": "NaiveMean_all_predictions.csv",
-    "NaiveLastHour": "NaiveLastHour_all_predictions.csv",
-    "SeasonalWeekly": "SeasonalWeekly_all_predictions.csv",
-    "RandomForest": "RandomForest_all_predictions.csv",
-    "PoissonGLM": "PoissonGLM_all_predictions.csv",
-    "XGBRegressor": "XGBRegressor_all_predictions.csv",
-    "CatBoost": "CatBoost_all_predictions.csv",
-}
-
-
-class ForecastPoint(BaseModel):
-    datetime: str
+class PredictionRequest(BaseModel):
     npu: str
-    actual: float
-    predicted: float
-    fold: Optional[str] = None
+    hour_ts: str
+    features: Dict[str, float]
 
+class PredictionResponse(BaseModel):
+    npu: str
+    hour_ts: str
+    predicted_count: float
+    model: str
+    dataset: str
 
-# ---------- Basic routes ----------
+class ModelInfo(BaseModel):
+    dataset: str
+    model_name: str
+    cv_mean_r2: float
+    cv_mean_mae: float
+    cv_mean_rmse: float
+    n_features: int
 
 @app.get("/")
 def root():
-    """Simple landing route."""
     return {
-        "message": "Atlanta Burglary Risk API",
-        "docs": "/docs",
-        "endpoints": ["/health", "/models", "/forecast"],
+        "message": "Atlanta Burglary Prediction API",
+        "version": "1.0.0",
+        "endpoints": {
+            "/models": "List available models with metrics",
+            "/forecast/{dataset}/{model}": "Get historical predictions",
+            "/predict/{dataset}": "Make new prediction with best model",
+            "/health": "Health check"
+        }
     }
-
 
 @app.get("/health")
 def health():
-    """Healthcheck for monitoring."""
-    return {"status": "ok"}
-
-
-# ---------- Helper to load predictions ----------
-
-def load_model_predictions(model: str) -> pd.DataFrame:
-    """Load predictions CSV for a given model name and normalize columns."""
-    if model not in MODEL_FILES:
-        raise HTTPException(status_code=404, detail=f"Unknown model: {model}")
-
-    path = PRED_DIR / MODEL_FILES[model]
-    if not path.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"Predictions file not found for model {model}: {path}",
-        )
-
-    df = pd.read_csv(path, parse_dates=["hour_ts"])
-
-    # Standardize column names used by the API
-    rename_map = {
-        "hour_ts": "datetime",
-        "burglary_count": "actual",
-        # "predicted" is already the right name from the notebook
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "artifacts_exist": ARTIFACTS_DIR.exists(),
+        "test_results_exist": TEST_RESULTS_DIR.exists()
     }
-    df = df.rename(columns=rename_map)
 
-    # Sanity checks
-    for col in ["datetime", "npu", "actual", "predicted"]:
-        if col not in df.columns:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Column '{col}' missing from predictions file {path.name}",
-            )
+@app.get("/models", response_model=List[ModelInfo])
+def list_models():
+    """List all available trained models with their performance metrics."""
+    models = []
+    
+    for dataset_dir in ARTIFACTS_DIR.iterdir():
+        if not dataset_dir.is_dir():
+            continue
+            
+        dataset_name = dataset_dir.name
+        
+        for metadata_file in dataset_dir.glob("*_metadata.json"):
+            try:
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+                
+                models.append(ModelInfo(
+                    dataset=dataset_name,
+                    model_name=metadata["best_model"],
+                    cv_mean_r2=metadata["CV_Mean_R2"],
+                    cv_mean_mae=metadata["CV_Mean_MAE"],
+                    cv_mean_rmse=metadata["CV_Mean_RMSE"],
+                    n_features=len(metadata["feature_cols"])
+                ))
+            except Exception as e:
+                continue
+    
+    return sorted(models, key=lambda x: x.cv_mean_r2, reverse=True)
 
-    return df
-
-
-# ---------- Public API endpoints ----------
-
-@app.get("/models")
-def list_models() -> List[str]:
-    """List models available through the API."""
-    return sorted(MODEL_FILES.keys())
-
-
-@app.get("/forecast", response_model=List[ForecastPoint])
+@app.get("/forecast/{dataset}/{model}")
 def get_forecast(
-    model: str = Query(..., description="Model name, e.g. 'RandomForest'"),
-    npu: str = Query(..., description="NPU label, e.g. 'A' or 'M'"),
-    max_points: int = Query(
-        500,
-        ge=1,
-        le=2000,
-        description="Maximum number of time points to return",
-    ),
+    dataset: str,
+    model: str,
+    npu: Optional[str] = Query(None, description="Filter by NPU"),
+    limit: int = Query(100, ge=1, le=10000)
 ):
-    """
-    Return actual vs predicted counts over time for a given model + NPU.
-
-    Uses the combined *_all_predictions.csv files from outputs/december/cv_results/predictions.
-    """
-    df = load_model_predictions(model)
-
-    sub = df[df["npu"] == npu].sort_values("datetime")
-    if sub.empty:
-        raise HTTPException(status_code=404, detail=f"No forecast rows for NPU {npu}")
-
-    sub = sub.head(max_points)
-
-    results: List[ForecastPoint] = []
-    for _, row in sub.iterrows():
-        results.append(
-            ForecastPoint(
-                datetime=row["datetime"].isoformat(),
-                npu=str(row["npu"]),
-                actual=float(row["actual"]),
-                predicted=float(row["predicted"]),
-                fold=row["fold"] if "fold" in sub.columns else None,
-            )
+    """Get historical predictions from rolling CV results."""
+    
+    pred_file = TEST_RESULTS_DIR / dataset / "cv_results" / "predictions" / f"{model}_all_predictions.csv"
+    
+    if not pred_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Predictions not found for dataset '{dataset}' and model '{model}'"
         )
+    
+    try:
+        df = pd.read_csv(pred_file)
+        
+        rename_map = {}
+        for col in df.columns:
+            col_lower = col.lower()
+            if col_lower in ["hour_ts", "datetime"]:
+                rename_map[col] = "hour_ts"
+            elif col_lower in ["burglary_count", "crime_count", "actual"]:
+                rename_map[col] = "actual"
+            elif col_lower in ["predicted", "pred"]:
+                rename_map[col] = "predicted"
+        
+        df = df.rename(columns=rename_map)
+        
+        if npu:
+            df = df[df["npu"] == npu]
+        
+        df = df.head(limit)
+        
+        if df.empty:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No predictions found for NPU '{npu}'" if npu else "No predictions found"
+            )
+        
+        results = []
+        for _, row in df.iterrows():
+            results.append({
+                "hour_ts": str(row["hour_ts"]),
+                "npu": str(row["npu"]),
+                "actual": float(row["actual"]),
+                "predicted": float(row["predicted"]),
+                "model": model,
+                "dataset": dataset
+            })
+        
+        return {
+            "dataset": dataset,
+            "model": model,
+            "count": len(results),
+            "predictions": results
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return results
+@app.post("/predict/{dataset}", response_model=PredictionResponse)
+def predict(dataset: str, request: PredictionRequest):
+    """Make a new prediction using the best model for the dataset."""
+    
+    dataset_dir = ARTIFACTS_DIR / dataset
+    if not dataset_dir.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset '{dataset}' not found"
+        )
+    
+    model_files = list(dataset_dir.glob("*_best_model.joblib"))
+    metadata_files = list(dataset_dir.glob("*_metadata.json"))
+    
+    if not model_files or not metadata_files:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Model artifacts not found for dataset '{dataset}'"
+        )
+    
+    try:
+        model = joblib.load(model_files[0])
+        
+        with open(metadata_files[0], 'r') as f:
+            metadata = json.load(f)
+        
+        feature_cols = metadata["feature_cols"]
+        
+        input_df = pd.DataFrame([request.features])
+        
+        missing_features = set(feature_cols) - set(input_df.columns)
+        if missing_features:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required features: {missing_features}"
+            )
+        
+        X = input_df[feature_cols].fillna(0)
+        
+        prediction = model.predict(X)[0]
+        
+        return PredictionResponse(
+            npu=request.npu,
+            hour_ts=request.hour_ts,
+            predicted_count=float(prediction),
+            model=metadata["best_model"],
+            dataset=dataset
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/datasets")
+def list_datasets():
+    """List available datasets."""
+    datasets = []
+    
+    for dataset_dir in ARTIFACTS_DIR.iterdir():
+        if not dataset_dir.is_dir():
+            continue
+        
+        metadata_files = list(dataset_dir.glob("*_metadata.json"))
+        if metadata_files:
+            try:
+                with open(metadata_files[0], 'r') as f:
+                    metadata = json.load(f)
+                
+                datasets.append({
+                    "name": dataset_dir.name,
+                    "best_model": metadata["best_model"],
+                    "cv_r2": metadata["CV_Mean_R2"],
+                    "n_rows": metadata["n_rows"],
+                    "n_features": len(metadata["feature_cols"]),
+                    "target": metadata["target_col"]
+                })
+            except:
+                continue
+    
+    return {"datasets": datasets}
+
+@app.get("/features/{dataset}")
+def get_features(dataset: str):
+    """Get required feature list for a dataset."""
+    
+    dataset_dir = ARTIFACTS_DIR / dataset
+    if not dataset_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset}' not found")
+    
+    metadata_files = list(dataset_dir.glob("*_metadata.json"))
+    if not metadata_files:
+        raise HTTPException(status_code=404, detail=f"Metadata not found for '{dataset}'")
+    
+    with open(metadata_files[0], 'r') as f:
+        metadata = json.load(f)
+    
+    return {
+        "dataset": dataset,
+        "model": metadata["best_model"],
+        "features": metadata["feature_cols"],
+        "feature_count": len(metadata["feature_cols"])
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+# To quick run: python -m atl_model_pipelines.models.horizon_models
+# Check atl_model_pipelines/README.md for quick guide.
+
 import os
 import sys
 import json
@@ -9,7 +13,7 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 import numpy as np
 
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.multioutput import MultiOutputRegressor
 from xgboost import XGBRegressor
 import joblib
@@ -251,40 +255,51 @@ def main():
         index=y_test.index,
     )
 
-
     ## Metrics per horizon
     metrics = {}
+
     for h in HORIZONS:
         col = f"y_h{h}"
 
         mse = mean_squared_error(y_test[col], y_pred[col])
         rmse = np.sqrt(mse)
         mae = mean_absolute_error(y_test[col], y_pred[col])
+        r2 = r2_score(y_test[col], y_pred[col])
+
         metrics[f"rmse_h{h}"] = float(rmse)
         metrics[f"mae_h{h}"] = float(mae)
+        metrics[f"r2_h{h}"] = float(r2)
 
+    # ---- Averages computed AFTER the loop ----
     metrics["rmse_mean"] = float(
         np.mean([metrics[f"rmse_h{h}"] for h in HORIZONS])
     )
     metrics["mae_mean"] = float(
         np.mean([metrics[f"mae_h{h}"] for h in HORIZONS])
     )
+    metrics["r2_mean"] = float(
+        np.mean([metrics[f"r2_h{h}"] for h in HORIZONS])
+    )
 
     print("Average RMSE across horizons:", metrics["rmse_mean"])
     print("Average MAE across horizons:", metrics["mae_mean"])
-    
+    print("Average R2 across horizons:",  metrics["r2_mean"])
+
+    # ---- Save CSV ----
     metrics_rows = []
     for h in HORIZONS:
         metrics_rows.append({
             "horizon": h,
             "rmse": metrics[f"rmse_h{h}"],
-            "mae": metrics[f"mae_h{h}"]
+            "mae":  metrics[f"mae_h{h}"],
+            "r2":   metrics[f"r2_h{h}"],
         })
-    
+
     df_metrics = pd.DataFrame(metrics_rows)
     df_metrics.to_csv(OUT_DIR / "horizon_metrics.csv", index=False)
 
     wandb.log(metrics)
+
 
 # Save predictions to the official test_results directory
     pred_dir = OUT_DIR / "predictions"

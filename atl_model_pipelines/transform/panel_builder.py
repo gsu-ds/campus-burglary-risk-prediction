@@ -1,276 +1,310 @@
-"""
-panel_builder.py
+# To quickly run > python -m atl_model_pipelines.transfor
+"""Builds three NPU × hour panels:
 
-Builds NPU × hour panels matching notebook Step 13 logic exactly:
-- Uses specific aggregation dictionary for features
-- Sparse panel: Only hours with incidents
-- Dense panel: Complete grid with proper filling
+1. Target panel  (with lag features)
+2. Sparse panel  (only observed NPU × hour)
+3. Dense panel   (complete grid) — STREAMED to parquet so RAM never spikes
+
+The dense panel is written NPU-by-NPU using Arrow row groups.
+This prevents Codespaces OOM termination.
 """
 
-import pandas as pd
-import numpy as np
 from pathlib import Path
+import numpy as np
+import pandas as pd
+import polars as pl
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
 from rich.console import Console
 from rich.panel import Panel
 
-from config import DATA_TARGET, DATA_SPARSE, DATA_DENSE, SCHOOL_CENTERS
+from config import (
+    DATA_TARGET,
+    DATA_SPARSE,
+    DATA_DENSE,
+    DATA_TARGET_PANEL,
+    SCHOOL_CENTERS,
+)
 from atl_model_pipelines.utils.logging import log_step
 
 console = Console()
 
+# -------------------------------------------------------------
+# GLOBAL CONFIG
+# -------------------------------------------------------------
+
+WRITE_CSV = False  # leave False for stability in Codespaces
+
 BOOLISH_COLS = [
-    "is_raining", "is_hot", "is_cold", "is_daylight",
-    "is_weekend", "is_holiday"
+    "is_raining", "is_hot", "is_cold",
+    "is_daylight", "is_weekend", "is_holiday",
 ]
 
-# Exact aggregation from notebook
-AGG_DICT = {
-    "grid_density_7d": "mean",
-    "npu_crime_avg_30d": "first",
-    "temp_f": "mean",
-    "is_raining": "max",
-    "is_hot": "max",
-    "is_cold": "max",
-    "is_daylight": "max",
-    "is_weekend": "first",
-    "is_holiday": "first",
-    "day_number": "first",
-    "month": "first",
-    "year": "first",
-    "hour_sin": "first",
-    "hour_cos": "first",
-    "day_of_week": "first",
-    "campus_distance_m": "mean",
-    "location_type_count": "mean",
-}
+NUMERIC_COLS_BASE = [
+    "location_type_count", "incident_hour", "year", "month",
+    "hour_sin", "hour_cos",
+    "temp_f", "precip_in", "rain_in",
+    "apparent_temp_f", "daylight_duration_sec", "sunshine_duration_sec",
+    "precip_hours", "rain_sum_in", "temp_mean_f",
+    "grid_density_7d", "npu_crime_avg_30d",
+    "campus_distance_m",
+]
 
-# Add campus binary flags to aggregation
-for campus in SCHOOL_CENTERS.keys():
-    AGG_DICT[f"near_{campus.lower()}"] = "max"
+CAT_COLS_BASE = [
+    "day_number", "day_of_week", "hour_block",
+    "is_holiday", "is_weekend", "is_daylight",
+    "weather_code_hourly", "weather_code_daily",
+    "offense_category", "campus_label", "campus_code",
+    "event_watch_day_watch", "event_watch_evening_watch", "event_watch_morning_watch",
+    "near_gsu", "near_ga_tech", "near_emory", "near_clark",
+    "near_spelman", "near_morehouse", "near_morehouse_med",
+    "near_atlanta_metro", "near_atlanta_tech",
+    "near_scad", "near_john_marshall",
+]
 
+LAGS = [1, 3, 6, 12, 24, 168]
+LAG_COLS = [f"lag_{l}" for l in LAGS]
+
+# -------------------------------------------------------------
+# LOAD DATA
+# -------------------------------------------------------------
 
 def load_target_crimes(path: Path = DATA_TARGET) -> pd.DataFrame:
-    """Load enriched target_crimes.parquet."""
     df = pd.read_parquet(path)
+
     df["report_date"] = pd.to_datetime(df["report_date"])
     df["npu"] = df["npu"].astype(str).str.upper().str.strip()
+
     return df
 
 
-def build_panel_target(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Build aggregated crime counts per NPU × hour.
-    """
-    console.print("[cyan]Building NPU × hour crime counts...[/cyan]")
-    
+# -------------------------------------------------------------
+# TARGET PANEL (with lag features)
+# -------------------------------------------------------------
+
+def build_target_panel(df: pd.DataFrame) -> pd.DataFrame:
+    console.print("[cyan]Building enriched TARGET panel (optimized)...[/cyan]")
+
     df = df.copy()
-    df["hour_ts"] = df["report_date"].dt.floor("H")
-    
-    panel_target = (
-        df.groupby(["npu", "hour_ts"])
-        .size()
-        .reset_index(name="crime_count")
+    df["hour_ts"] = df["report_date"].dt.floor("h")
+
+    numeric_cols = [c for c in NUMERIC_COLS_BASE if c in df.columns]
+    cat_cols = [c for c in CAT_COLS_BASE if c in df.columns]
+
+    cols = ["npu", "hour_ts"] + numeric_cols + cat_cols
+    df = df[cols]
+
+    pl_df = pl.from_pandas(df)
+
+    # Burglary counts
+    hourly_counts = (
+        pl_df
+        .group_by(["npu", "hour_ts"])
+        .agg(pl.len().alias("burglary_count"))
+        .to_pandas()
     )
-    
-    return panel_target
 
+    # Numeric means
+    if numeric_cols:
+        hourly_numeric = (
+            pl_df.group_by(["npu", "hour_ts"])
+            .agg([pl.col(c).mean().alias(c) for c in numeric_cols])
+            .to_pandas()
+        )
+    else:
+        hourly_numeric = hourly_counts[["npu", "hour_ts"]].copy()
 
-def build_panel_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Extract enriched features at NPU × hour level using notebook aggregation logic.
-    """
-    console.print("[cyan]Extracting features per NPU × hour...[/cyan]")
-    
-    df = df.copy()
-    df["hour_ts"] = df["report_date"].dt.floor("H")
-    
-    # Apply aggregation only for columns that exist
-    agg_to_use = {col: func for col, func in AGG_DICT.items() if col in df.columns}
-    
-    panel_features = (
-        df.groupby(["npu", "hour_ts"])
-        .agg(agg_to_use)
-        .reset_index()
+    # Categorical modes
+    if cat_cols:
+        hourly_cat = (
+            pl_df.group_by(["npu", "hour_ts"])
+            .agg([pl.col(c).mode().first().alias(c) for c in cat_cols])
+            .to_pandas()
+        )
+    else:
+        hourly_cat = hourly_counts[["npu", "hour_ts"]].copy()
+
+    # Merge panels
+    panel = (
+        hourly_counts
+        .merge(hourly_numeric, on=["npu", "hour_ts"], how="left")
+        .merge(hourly_cat, on=["npu", "hour_ts"], how="left")
+        .sort_values(["npu", "hour_ts"])
+        .reset_index(drop=True)
     )
-    
-    return panel_features
+
+    # LAG FEATURES
+    for lag in LAGS:
+        panel[f"lag_{lag}"] = panel.groupby("npu")["burglary_count"].shift(lag)
+
+    panel = panel.dropna(subset=LAG_COLS)
+
+    console.print(f"[yellow]TARGET panel → {panel.shape[0]:,} rows × {panel.shape[1]} cols[/yellow]")
+    return panel
 
 
-def build_sparse_panel(df: pd.DataFrame) -> pd.DataFrame:
+# -------------------------------------------------------------
+# SPARSE PANEL
+# -------------------------------------------------------------
+
+def build_sparse_panel(base_panel: pd.DataFrame) -> pd.DataFrame:
+    console.print("\n[bold cyan]Building SPARSE panel...[/bold cyan]")
+
+    sparse = base_panel.copy()
+    if "burglary_count" in sparse.columns:
+        sparse = sparse.rename(columns={"burglary_count": "crime_count"})
+
+    console.print(f"[green]Sparse panel → {sparse.shape[0]:,} rows × {sparse.shape[1]} cols[/green]")
+    return sparse
+
+
+# -------------------------------------------------------------
+# STREAMING DENSE PANEL — THE FIX 
+# -------------------------------------------------------------
+
+def build_dense_panel_streaming(base_panel: pd.DataFrame, output_path: Path):
     """
-    Build SPARSE panel: Only NPU × hour combinations where crimes occurred.
-    Matches notebook sparse panel logic exactly.
+    Build DENSE panel using an Arrow ParquetWriter streaming approach.
+    This avoids ever holding the full dense panel in memory.
     """
-    console.print("\n[bold cyan]Building SPARSE Panel[/bold cyan]")
-    
-    panel_target = build_panel_target(df)
-    panel_features = build_panel_features(df)
-    
-    console.print("[cyan]Merging aggregated features with crime target panel...[/cyan]")
-    
-    panel_merged = panel_target.merge(
-        panel_features,
-        on=["npu", "hour_ts"],
-        how="left",
-    )
-    
-    # Fill numeric with 0
-    num_cols = panel_merged.select_dtypes(include=["number"]).columns
-    for col in num_cols:
-        panel_merged[col] = panel_merged[col].fillna(0)
-    
-    # Fill categorical with "MISSING"
-    cat_cols = panel_merged.select_dtypes(include=["object", "category"]).columns
-    for col in cat_cols:
-        panel_merged[col] = panel_merged[col].astype(str).fillna("MISSING")
-    
-    console.print(
-        f"[green]Sparse NPU-hour panel: {panel_merged.shape[0]:,} rows × {panel_merged.shape[1]} cols[/green]"
-    )
-    
-    return panel_merged
+
+    console.print("\n[bold cyan]Building DENSE panel (STREAMING, memory-safe)...[/bold cyan]")
+
+    base_panel = base_panel.copy()
+    base_panel["hour_ts"] = pd.to_datetime(base_panel["hour_ts"])
+
+    npus = sorted(base_panel["npu"].unique())
+    start = base_panel["hour_ts"].min()
+    end   = base_panel["hour_ts"].max()
+    all_hours = pd.date_range(start=start, end=end, freq="h")
+
+    writer = None
+
+    for npu in npus:
+        console.print(f"[cyan]Processing NPU {npu}...[/cyan]")
+
+        df_npu = base_panel[base_panel["npu"] == npu]
+
+        # Build this NPU’s full time grid
+        grid = pd.DataFrame({
+            "npu": [npu] * len(all_hours),
+            "hour_ts": all_hours,
+        })
+
+        merged = grid.merge(df_npu, on=["npu", "hour_ts"], how="left")
+
+        # Fill missing
+        num_cols = merged.select_dtypes(include=["number"]).columns
+        cat_cols = merged.select_dtypes(include=["object", "category"]).columns
+
+        merged[num_cols] = merged[num_cols].fillna(0)
+        """merged[cat_cols] = merged[cat_cols].fillna("MISSING").astype(str)"""
+        # Handle categorical columns safely
+        for col in cat_cols:
+            if str(merged[col].dtype).startswith("category"):
+                # Add "MISSING" category if not exists
+                if "MISSING" not in merged[col].cat.categories:
+                    merged[col] = merged[col].cat.add_categories(["MISSING"])
+                merged[col] = merged[col].fillna("MISSING")
+                merged[col] = merged[col].astype(str)  # convert to string so parquet doesn't choke
+            else:
+                merged[col] = merged[col].fillna("MISSING").astype(str)
 
 
-def build_dense_panel(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Build DENSE panel: Complete NPU × hour grid.
-    Matches notebook dense panel logic exactly.
-    """
-    console.print("\n[bold cyan]Building DENSE Panel[/bold cyan]")
-    console.print("[cyan]Building dense NPU-hour panel...[/cyan]")
-    
-    df_temp = df.copy()
-    df_temp["hour_ts"] = df_temp["report_date"].dt.floor("H")
-    
-    # Get valid NPUs (single letters A-Z)
-    valid_npus = sorted([
-        n for n in df_temp["npu"].unique() 
-        if isinstance(n, str) and n in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-    ])
-    
-    start_ts = df_temp["hour_ts"].min()
-    end_ts = df_temp["hour_ts"].max()
-    all_hours = pd.date_range(start=start_ts, end=end_ts, freq="h")
-    
-    console.print(f"[cyan]NPUs: {len(valid_npus)}, Hours: {len(all_hours):,}[/cyan]")
-    
-    # Create complete grid
-    panel_index = pd.MultiIndex.from_product(
-        [valid_npus, all_hours],
-        names=["npu", "hour_ts"],
-    )
-    panel_dense = pd.DataFrame(index=panel_index).reset_index()
-    
-    # Build target and features
-    panel_target = build_panel_target(df)
-    panel_features = build_panel_features(df)
-    
-    # Merge
-    panel_dense = panel_dense.merge(panel_target, on=["npu", "hour_ts"], how="left")
-    panel_dense = panel_dense.merge(panel_features, on=["npu", "hour_ts"], how="left")
-    
-    # Fill missing values
-    num_cols = panel_dense.select_dtypes(include=["number"]).columns
-    cat_cols = panel_dense.select_dtypes(include=["object", "category"]).columns
-    
-    panel_dense[num_cols] = panel_dense[num_cols].fillna(0)
-    
-    for col in cat_cols:
-        if col in ["npu", "hour_ts"]:
-            continue
-            
-        if pd.api.types.is_categorical_dtype(panel_dense[col]):
-            if "MISSING" not in panel_dense[col].cat.categories:
-                panel_dense[col] = panel_dense[col].cat.add_categories(["MISSING"])
-            panel_dense[col] = panel_dense[col].fillna("MISSING")
-        else:
-            panel_dense[col] = panel_dense[col].fillna("MISSING")
-    
-    console.print(
-        f"[green]Dense panel: {panel_dense.shape[0]:,} rows × {panel_dense.shape[1]} cols[/green]"
-    )
-    
-    return panel_dense
+        # Convert to Arrow
+        table = pa.Table.from_pandas(merged, preserve_index=False)
 
+        # Initialize writer once
+        if writer is None:
+            writer = pq.ParquetWriter(output_path, table.schema, compression="snappy")
+
+        writer.write_table(table)
+
+    if writer is not None:
+        writer.close()
+
+    console.print(f"[green]DENSE panel saved → {output_path}[/green]")
+    console.print(f"[green]Dense panel shape: {len(all_hours) * len(npus):,} x {len(merged.columns)}[/green]"
+)
+
+
+# -------------------------------------------------------------
+# BOOLEAN CLEANUP
+# -------------------------------------------------------------
 
 def clean_boolean_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure boolean indicator columns are clean int64."""
     df = df.copy()
-    
     for col in BOOLISH_COLS:
         if col in df.columns:
-            df[col] = (
-                df[col]
-                .replace("MISSING", 0)
-                .fillna(0)
-                .astype(int)
-            )
-    
+            df[col] = df[col].replace("MISSING", 0).fillna(0).astype("int8")
     return df
 
 
-def save_panels(sparse_df: pd.DataFrame, dense_df: pd.DataFrame) -> None:
-    """Save both panels to parquet and CSV."""
-    
+# -------------------------------------------------------------
+# SAVE TARGET + SPARSE (dense is saved via streaming)
+# -------------------------------------------------------------
+
+def save_target_and_sparse(target_panel, sparse_panel):
     console.print(
-        Panel("[bold cyan]Saving sparse and dense panels...[/bold cyan]",
-              border_style="cyan")
+        Panel("[bold cyan]Saving target + sparse panels...[/bold cyan]", border_style="cyan")
     )
-    
-    # Clean boolean columns
-    sparse_df = clean_boolean_columns(sparse_df)
-    dense_df = clean_boolean_columns(dense_df)
-    
-    # Sparse panel
-    sparse_df.to_parquet(DATA_SPARSE, index=False, compression="snappy")
-    sparse_df.to_csv(DATA_SPARSE.with_suffix(".csv"), index=False)
+
+    # TARGET
+    tp = clean_boolean_columns(target_panel)
+    tp.to_parquet(DATA_TARGET_PANEL, index=False, compression="snappy")
+    if WRITE_CSV:
+        tp.to_csv(DATA_TARGET_PANEL.with_suffix(".csv"), index=False)
+    console.print(f"[green]Saved target panel → {DATA_TARGET_PANEL.name}[/green]")
+
+    # SPARSE
+    sp = clean_boolean_columns(sparse_panel)
+    sp.to_parquet(DATA_SPARSE, index=False, compression="snappy")
+    if WRITE_CSV:
+        sp.to_csv(DATA_SPARSE.with_suffix(".csv"), index=False)
     console.print(f"[green]Saved sparse panel → {DATA_SPARSE.name}[/green]")
-    
-    # Dense panel
-    dense_df.to_parquet(DATA_DENSE, index=False, compression="snappy")
-    dense_df.to_csv(DATA_DENSE.with_suffix(".csv"), index=False)
-    console.print(f"[green]Saved dense panel → {DATA_DENSE.name}[/green]")
-    
-    console.print(
-        Panel.fit(
-            "[bold green]Panel exports complete (sparse + dense).[/bold green]",
-            border_style="green"
-        )
-    )
 
 
-def build_all_panels(df: pd.DataFrame = None, save: bool = True) -> dict:
-    """
-    Build both sparse and dense panels matching notebook Step 13.
-    
-    Parameters:
-        df: DataFrame with enriched target crimes. If None, loads from DATA_TARGET
-        save: Whether to save panels to disk
-    
-    Returns:
-        Dict with "sparse" and "dense" DataFrames
-    """
+# -------------------------------------------------------------
+# ORCHESTRATOR
+# -------------------------------------------------------------
+
+def build_all_panels(df: pd.DataFrame | None = None, save=True):
     if df is None:
-        console.print("[cyan]Loading target crimes from disk...[/cyan]")
         df = load_target_crimes()
-    
-    sparse = build_sparse_panel(df)
-    dense = build_dense_panel(df)
-    
+
+    target_panel = build_target_panel(df)
+    base_panel = target_panel.drop(columns=LAG_COLS, errors="ignore")
+
+    sparse_panel = build_sparse_panel(base_panel)
+
+    # Save target & sparse
     if save:
-        save_panels(sparse, dense)
-    
-    log_step("Step 13: NPU panels & feature store exports", sparse)
-    
+        save_target_and_sparse(target_panel, sparse_panel)
+
+        # STREAM the dense panel — no RAM spike
+        build_dense_panel_streaming(base_panel, DATA_DENSE)
+
+    # Log
+    log_step("Target panel", target_panel)
+    log_step("Sparse panel", sparse_panel)
+
     return {
-        "sparse": sparse,
-        "dense": dense
+        "target": target_panel,
+        "sparse": sparse_panel,
+        "dense_streamed": str(DATA_DENSE),
     }
 
 
-__all__ = [
-    "build_sparse_panel",
-    "build_dense_panel",
-    "build_all_panels",
-    "load_target_crimes"
-]
+# -------------------------------------------------------------
+# MAIN ENTRYPOINT
+# -------------------------------------------------------------
+
+if __name__ == "__main__":
+    console.print("[bold green]Running optimized panel_builder (streaming)...[/bold green]")
+
+    df = load_target_crimes()
+    build_all_panels(df=df, save=True)
+
+    console.print("[bold green]Panels successfully built and saved![/bold green]")

@@ -1,7 +1,13 @@
+#!/usr/bin/env python
+# To quick run: python -m atl_model_pipelines.models.poisson_models
+# Check atl_model_pipelines/README.md for quick guide.
+
+
 import argparse
 import json
 import os
 from pathlib import Path
+import joblib
 
 import numpy as np
 import pandas as pd
@@ -515,11 +521,51 @@ def main():
         ],
         key=lambda x: x[1]
     )[0]
+    if best_model_name == "xgboost_poisson":
+        best_model_obj = xgb_model
+    elif best_model_name == "lightgbm_poisson":
+        best_model_obj = lgb_model
+    elif best_model_name == "catboost_poisson":
+        best_model_obj = cb_model
+    elif best_model_name == "zip":
+        best_model_obj = zip_model
+    elif best_model_name == "prophet_hourly":
+        best_model_obj = ph_model
+    else:
+        best_model_obj = None     # Handle cases where the model couldn't be trained (e.g., CatBoost skip) 
+
+    if best_model_obj and HAS_WANDB:
+        wandb.config.update({"best_model": best_model_name})
+# Save the model object and its associated metadata 
+        model_path = args.output / f"{best_model_name}_final.joblib"
+        metadata_path = args.output / f"{best_model_name}_meta.json"
+# Metadata to save with the model
+        model_meta = {
+            "model_type": best_model_name,
+            "feature_cols": feature_cols,
+            "target_col": "burglary_count",
+            "test_mae": metrics[best_model_name]["mae"],
+            }
+        with open(metadata_path, "w") as f:
+            json.dump(model_meta, f, indent=2)
+
+        joblib.dump(best_model_obj, model_path)
+            
+# Log the model as a WandB Artifact 
+        model_artifact = wandb.Artifact(
+            name=f"{best_model_name}-poisson-model",
+            type="model",
+            description=f"Best count regression model: {best_model_name}",
+            metadata={"mae": metrics[best_model_name]["mae"], "dataset": "dense-panel"}
+        )
+        model_artifact.add_file(model_path)
+        model_artifact.add_file(metadata_path)
+        wandb_run.log_artifact(model_artifact)
 
     if HAS_WANDB:
         wandb.config.update({"model": best_model_name})
 
-        # flatten metrics
+# Flatten metrics
         flat_metrics = {}
         for model_name, model_metrics in metrics.items():
             for metric_name, value in model_metrics.items():

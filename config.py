@@ -12,12 +12,14 @@ RAW_SHP_DIR = RAW_DIR / "shapefiles"
 
 INTERIM_DIR = DATA_DIR / "interim" / "apd"
 PROCESSED_DIR = DATA_DIR / "processed" / "apd"
+PANELS_DIR = PROCESSED_DIR / "panels"  
 EXTERNAL_DIR = DATA_DIR / "external"
 
-# Data Panel Paths
-DATA_SPARSE = PROCESSED_DIR / "npu_sparse_panel.parquet"
-DATA_DENSE  = PROCESSED_DIR / "npu_dense_panel.parquet"
+# Data Panel Paths 
+DATA_SPARSE = PANELS_DIR / "npu_sparse_panel.parquet"
+DATA_DENSE  = PANELS_DIR / "npu_dense_panel.parquet"
 DATA_TARGET = PROCESSED_DIR / "target_crimes.parquet"
+DATA_TARGET_PANEL = PANELS_DIR / "target_crimes_panel.parquet" 
 
 # Weather Data Paths
 HOURLY_WEATHER_CSV = EXTERNAL_DIR / "atlanta_hourly_weather_2021_to_current.csv"
@@ -91,3 +93,4 @@ TEST_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 WANDB_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 CATBOOST_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ASSORTED_ARTIFACTS.mkdir(parents=True, exist_ok=True)
+PANELS_DIR.mkdir(parents=True, exist_ok=True)

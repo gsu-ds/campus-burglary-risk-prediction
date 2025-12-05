@@ -1,0 +1,66 @@
+############################################################
+# DOCKERIGNORE FOR CAMPUS-BURGLARY-RISK-PREDICTION PROJECT #
+############################################################
+
+# --- 1. Ignore ALL data during Docker build (mounted at runtime) ---
+data/
+
+# --- 2. Ignore envs ---
+.env
+.venv
+venv/
+env/
+dsci_env/
+ENV/
+
+# --- 3. Ignore notebooks and checkpoints ---
+notebooks/
+*.ipynb
+.ipynb_checkpoints/
+
+# --- 4. Ignore large artifacts and results ---
+archive/
+artifacts/
+outputs/
+reports/
+packaged_models/
+test_results/
+
+# --- 5. Ignore temp files, caches, build trash ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite
+*.db
+
+# --- 6. Ignore Git and editor metadata ---
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+
+# --- 7. Ignore project metadata not needed in image ---
+LICENSE
+Makefile
+README.md
+pyproject.toml
+mkdocs.yml
+docs/
+site/
+
+# --- 8. Ignore workflow YAMLs (not needed inside container) ---
+*.yml
+*.yaml
+
+# --- 9. Ignore Python packaging directories ---
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# --- 10. Ignore Ruff, PyType, Pyre ---
+.ruff_cache/
+.pytype/
+.pyre/

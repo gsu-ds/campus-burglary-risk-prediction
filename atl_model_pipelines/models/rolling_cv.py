@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# To quick run: python -m atl_model_pipelines.models.rolling_cv
 # Check atl_model_pipelines/README.md for quick guide.
 
 import os
@@ -6,17 +7,28 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-import pandas as pd 
+import pandas as pd
+import joblib
+import json
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 
 from config import (
-    PROCESSED_DIR, LEADERBOARD_DIR,TEST_RESULTS_DIR, WANDB_OUTPUT_DIR, 
-    CARDS_DIR, DATA_SPARSE, DATA_DENSE, DATA_TARGET, CATBOOST_OUTPUT_DIR)
+    PROCESSED_DIR,
+    LEADERBOARD_DIR,
+    TEST_RESULTS_DIR,
+    WANDB_OUTPUT_DIR,
+    CARDS_DIR,
+    DATA_SPARSE,
+    DATA_DENSE,
+    DATA_TARGET,
+    DATA_TARGET_PANEL,
+    CATBOOST_OUTPUT_DIR,
+    ARTIFACTS_DIR,
+)
 
-# Imports set to "try/except" to prevent auto-crashing: XGBoost / CatBoost / W&B
 try:
     from xgboost import XGBRegressor
     HAS_XGB = True
@@ -39,35 +51,37 @@ try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
-except ImportError:
-    # Fallback minimal console
+except Exception:
     class _Dummy:
         def print(self, *args, **kwargs):
             print(*args)
-            print("Dummy Class...")
+
     Console = _Dummy  # type: ignore
     Panel = lambda x, **kwargs: x  # type: ignore
     Table = None  # type: ignore
 
 console = Console()
 
-# WANDB Paths
 WANDB_PROJECT = "Data Science Capstone - Final Tests"
-WANDB_ENTITY = "joshuadariuspina-georgia-state-university"  
+WANDB_ENTITY = "joshuadariuspina-georgia-state-university"
 TRAIN_END = "2024-01-01"
 
-# Model "zoo"
+TARGET_MAP = {
+    "target_crimes_panel": "burglary_count",
+    "npu_sparse_panel": "crime_count",
+    "npu_dense_panel": "crime_count",
+}
+
 
 def build_model_zoo() -> Dict[str, object]:
     models: Dict[str, object] = {}
 
-    # Very simple baseline: predicts train-set mean
     class MeanBaseline:
         def fit(self, X, y):
             self.mean_ = float(np.mean(y))
-            return self
+
         def predict(self, X):
-            return np.full(shape=(len(X),), fill_value=self.mean_, dtype=float)
+            return np.full(len(X), self.mean_)
 
     models["BaselineMean"] = MeanBaseline()
     models["LinearRegression"] = LinearRegression()
@@ -104,20 +118,7 @@ def build_model_zoo() -> Dict[str, object]:
     return models
 
 
-# -----------------------------------------------------------------------------
-# HELPERS
-# -----------------------------------------------------------------------------
-
 def ensure_output_dirs(base_dir: Path) -> Dict[str, Path]:
-    """
-    Create:
-      base_dir/
-        simple_results.csv
-        cv_results/
-        cv_results/folds/
-        cv_results/predictions/
-        model_cards/
-    """
     cv_results = base_dir / "cv_results"
     cv_folds = cv_results / "folds"
     cv_preds = cv_results / "predictions"
@@ -135,27 +136,21 @@ def ensure_output_dirs(base_dir: Path) -> Dict[str, Path]:
     }
 
 
-def get_feature_columns(df: pd.DataFrame, target_col: str, date_col: str, group_col: str) -> List[str]:
-    """
-    Select numeric features only, excluding target, date, grouping, and any obvious leakage columns.
-    """
+def get_feature_columns(
+    df: pd.DataFrame, target_col: str, date_col: str, group_col: str
+) -> List[str]:
     drop = {target_col, date_col, group_col, "burglary_count", "hour_ts", "report_date"}
     numeric_cols = df.select_dtypes(include=[np.number]).columns
-    feature_cols = [c for c in numeric_cols if c not in drop]
-    return feature_cols
+    return [c for c in numeric_cols if c not in drop]
 
 
-def compute_metrics(y_true, y_pred) -> Dict[str, float]:
+def compute_metrics(y_true, y_pred):
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
     r2 = r2_score(y_true, y_pred)
     mape = float(np.mean(np.abs((y_true - y_pred) / (y_true + 1e-10))) * 100)
     return {"MAE": mae, "RMSE": rmse, "R2": r2, "MAPE": mape}
 
-
-# -----------------------------------------------------------------------------
-# ROLLING ORIGIN CROSS-VALIDATION
-# -----------------------------------------------------------------------------
 
 def run_rolling_cv(
     model,
@@ -166,12 +161,8 @@ def run_rolling_cv(
     feature_cols: List[str],
     cv_dirs: Dict[str, Path],
     model_name: str,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Rolling-origin CV over fixed time folds.
-    Returns (metrics_df, predictions_df).
-    """
-
+    batch_size: int | None = None,
+):
     df_local = df.copy()
     df_local[date_col] = pd.to_datetime(df_local[date_col])
 
@@ -185,59 +176,58 @@ def run_rolling_cv(
     metrics_rows: List[Dict] = []
     all_preds: List[pd.DataFrame] = []
 
-    console.print(
-        Panel(
-            f"[bold cyan]Rolling CV for {model_name}[/bold cyan]",
-            border_style="cyan",
-        )
-    )
+    console.print(Panel(f"[bold cyan]Rolling CV for {model_name}[/bold cyan]"))
 
-    for fold_idx, (train_end, test_end) in enumerate(folds, start=1):
-        fold_name = f"Fold {fold_idx}"
+    for idx, (train_end, test_end) in enumerate(folds, start=1):
+        f_name = f"Fold {idx}"
 
-        train_mask = df_local[date_col] < train_end
-        test_mask = (df_local[date_col] >= train_end) & (df_local[date_col] < test_end)
-
-        train_df = df_local[train_mask].copy()
-        test_df = df_local[test_mask].copy()
+        train_df = df_local[df_local[date_col] < train_end]
+        test_df = df_local[
+            (df_local[date_col] >= train_end)
+            & (df_local[date_col] < test_end)
+        ]
 
         if test_df.empty:
-            console.print(f"[yellow]{model_name} - {fold_name}: No test data, skipping.[/yellow]")
             continue
 
-        X_train = train_df[feature_cols]
+        X_train = train_df[feature_cols].fillna(0)
         y_train = train_df[target_col]
-        X_test = test_df[feature_cols]
+        X_test = test_df[feature_cols].fillna(0)
         y_test = test_df[target_col]
 
-        # Save splits
-        train_path = cv_dirs["cv_folds"] / f"{model_name}_fold{fold_idx}_train.csv"
-        test_path = cv_dirs["cv_folds"] / f"{model_name}_fold{fold_idx}_test.csv"
-        train_df.to_csv(train_path, index=False)
-        test_df.to_csv(test_path, index=False)
+        model.fit(X_train, y_train)
 
-        # Fit / predict
-        if hasattr(model, "fit"):
-            model.fit(X_train, y_train)
-            preds = model.predict(X_test)
+        if batch_size is not None and len(X_test) > batch_size:
+            preds_list = []
+            for start in range(0, len(X_test), batch_size):
+                end = start + batch_size
+                preds_list.append(model.predict(X_test.iloc[start:end]))
+            preds = np.concatenate(preds_list)
         else:
-            # Fallback for weird baselines; shouldn't hit for our MeanBaseline
             preds = model.predict(X_test)
 
         m = compute_metrics(y_test, preds)
         console.print(
-            f"[green]{model_name} - {fold_name}[/green] "
-            f"MAE={m['MAE']:.4f}, RMSE={m['RMSE']:.4f}, R²={m['R2']:.4f}, MAPE={m['MAPE']:.2f}%"
+            f"[green]{model_name} - {f_name}[/green] "
+            f"MAE={m['MAE']:.4f}, RMSE={m['RMSE']:.4f}, R²={m['R2']:.4f}"
         )
+
+        if HAS_WANDB and wandb.run is not None:
+            wandb.log(
+                {
+                    "split": "cv",
+                    "model": model_name,
+                    "fold": f_name,
+                    "cv/MAE": m["MAE"],
+                    "cv/RMSE": m["RMSE"],
+                    "cv/R2": m["R2"],
+                    "cv/MAPE": m["MAPE"],
+                }
+            )
 
         metrics_rows.append(
             {
-                "Fold": fold_name,
-                "Fold_Number": fold_idx,
-                "Train_End": train_end,
-                "Test_End": test_end,
-                "Train_Size": len(train_df),
-                "Test_Size": len(test_df),
+                "Fold": f_name,
                 "MAE": m["MAE"],
                 "RMSE": m["RMSE"],
                 "R²": m["R2"],
@@ -247,10 +237,7 @@ def run_rolling_cv(
 
         pred_df = test_df[[date_col, group_col, target_col]].copy()
         pred_df["predicted"] = preds
-        pred_df["residual"] = y_test.values - preds
-        pred_df["abs_error"] = np.abs(pred_df["residual"])
-        pred_df["fold"] = fold_name
-        pred_df["fold_number"] = fold_idx
+        pred_df["fold"] = f_name
         all_preds.append(pred_df)
 
     if not metrics_rows:
@@ -259,18 +246,15 @@ def run_rolling_cv(
     metrics_df = pd.DataFrame(metrics_rows)
     preds_df = pd.concat(all_preds, ignore_index=True)
 
-    # Save
-    metrics_path = cv_dirs["cv_results"] / f"{model_name}_cv_metrics.csv"
-    preds_path = cv_dirs["cv_preds"] / f"{model_name}_all_predictions.csv"
-    metrics_df.to_csv(metrics_path, index=False)
-    preds_df.to_csv(preds_path, index=False)
+    metrics_df.to_csv(
+        cv_dirs["cv_results"] / f"{model_name}_cv_metrics.csv", index=False
+    )
+    preds_df.to_csv(
+        cv_dirs["cv_preds"] / f"{model_name}_all_predictions.csv", index=False
+    )
 
     return metrics_df, preds_df
 
-
-# -----------------------------------------------------------------------------
-# SIMPLE TRAIN/TEST (NO ROLLING CV)
-# -----------------------------------------------------------------------------
 
 def run_simple_split(
     models: Dict[str, object],
@@ -278,43 +262,52 @@ def run_simple_split(
     target_col: str,
     date_col: str,
     feature_cols: List[str],
-    output_path: Path,
-) -> pd.DataFrame:
-    """
-    Train on [min_date, TRAIN_END), test on [TRAIN_END, max_date].
-    """
+    out_path: Path,
+) -> Tuple[pd.DataFrame, Dict[str, object]]:
     df_local = df.copy()
     df_local[date_col] = pd.to_datetime(df_local[date_col])
 
     train_df = df_local[df_local[date_col] < TRAIN_END]
     test_df = df_local[df_local[date_col] >= TRAIN_END]
 
-    X_train = train_df[feature_cols]
+    X_train = train_df[feature_cols].fillna(0)
     y_train = train_df[target_col]
-    X_test = test_df[feature_cols]
+    X_test = test_df[feature_cols].fillna(0)
     y_test = test_df[target_col]
 
-    simple_rows: List[Dict] = []
+    rows: List[Dict] = []
+    fitted_models: Dict[str, object] = {}
 
     console.print(
         Panel(
-            f"[bold cyan]Simple train/test split ({TRAIN_END} cutoff)[/bold cyan]",
-            border_style="cyan",
+            f"[bold cyan]Simple train/test split ({TRAIN_END} cutoff)[/bold cyan]"
         )
     )
 
     for name, model in models.items():
-        console.print(f"[cyan]Training {name} (simple split)...[/cyan]")
+        console.print(f"[cyan]Training {name}...[/cyan]")
         model.fit(X_train, y_train)
         preds = model.predict(X_test)
-
         m = compute_metrics(y_test, preds)
+
         console.print(
-            f"[green]{name}[/green] MAE={m['MAE']:.4f}, RMSE={m['RMSE']:.4f}, "
-            f"R²={m['R2']:.4f}, MAPE={m['MAPE']:.2f}%"
+            f"[green]{name}[/green] "
+            f"MAE={m['MAE']:.4f}, RMSE={m['RMSE']:.4f}, R²={m['R2']:.4f}"
         )
 
-        simple_rows.append(
+        if HAS_WANDB and wandb.run is not None:
+            wandb.log(
+                {
+                    "split": "simple",
+                    "model": name,
+                    "simple/MAE": m["MAE"],
+                    "simple/RMSE": m["RMSE"],
+                    "simple/R2": m["R2"],
+                    "simple/MAPE": m["MAPE"],
+                }
+            )
+
+        rows.append(
             {
                 "Model": name,
                 "MAE": m["MAE"],
@@ -324,18 +317,15 @@ def run_simple_split(
             }
         )
 
-    simple_df = pd.DataFrame(simple_rows).sort_values("MAE")
-    simple_df.to_csv(output_path, index=False)
-    return simple_df
+        fitted_models[name] = model
 
+    simple_df = pd.DataFrame(rows).sort_values("MAE")
+    simple_df.to_csv(out_path, index=False)
+    return simple_df, fitted_models
 
-# -----------------------------------------------------------------------------
-# DATASET PREPARATION
-# -----------------------------------------------------------------------------
 
 def load_sparse_panel(path: Path) -> pd.DataFrame:
     df = pd.read_parquet(path)
-    # assume already has columns: npu, hour_ts, burglary_count, + features
     df["hour_ts"] = pd.to_datetime(df["hour_ts"])
     return df
 
@@ -347,26 +337,104 @@ def load_dense_panel(path: Path) -> pd.DataFrame:
 
 
 def load_target_crimes_as_panel(path: Path) -> pd.DataFrame:
-    """
-    Convert target_crimes.parquet (row-level incidents) into NPU × hour panel
-    with burglary_count.
-    """
     df = pd.read_parquet(path)
+
     df["report_date"] = pd.to_datetime(df["report_date"])
     df["hour_ts"] = df["report_date"].dt.floor("h")
     df["npu"] = df["npu"].astype(str).str.upper().str.strip()
 
-    panel = (
+    hourly_counts = (
         df.groupby(["npu", "hour_ts"])
-        .size()
-        .reset_index(name="burglary_count")
+          .size()
+          .reset_index(name="burglary_count")
     )
+
+    numeric_cols = [
+        "location_type_count",
+        "incident_hour",
+        "year",
+        "month",
+        "hour_sin",
+        "hour_cos",
+        "temp_f",
+        "precip_in",
+        "rain_in",
+        "apparent_temp_f",
+        "daylight_duration_sec",
+        "sunshine_duration_sec",
+        "precip_hours",
+        "rain_sum_in",
+        "temp_mean_f",
+        "grid_density_7d",
+        "npu_crime_avg_30d",
+        "campus_distance_m",
+    ]
+
+    numeric_cols = [c for c in numeric_cols if c in df.columns]
+
+    if numeric_cols:
+        hourly_numeric = (
+            df.groupby(["npu", "hour_ts"])[numeric_cols]
+              .mean()
+              .reset_index()
+        )
+    else:
+        hourly_numeric = hourly_counts[["npu", "hour_ts"]].copy()
+
+    cat_cols = [
+        "day_number",
+        "day_of_week",
+        "hour_block",
+        "is_holiday",
+        "is_weekend",
+        "is_daylight",
+        "weather_code_hourly",
+        "weather_code_daily",
+        "offense_category",
+        "campus_label",
+        "campus_code",
+        "event_watch_day_watch",
+        "event_watch_evening_watch",
+        "event_watch_morning_watch",
+        "near_gsu",
+        "near_ga_tech",
+        "near_emory",
+        "near_clark",
+        "near_spelman",
+        "near_morehouse",
+        "near_morehouse_med",
+        "near_atlanta_metro",
+        "near_atlanta_tech",
+        "near_scad",
+        "near_john_marshall",
+    ]
+
+    cat_cols = [c for c in cat_cols if c in df.columns]
+
+    if cat_cols:
+        hourly_cat = (
+            df.groupby(["npu", "hour_ts"])[cat_cols]
+              .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[0])
+              .reset_index()
+        )
+    else:
+        hourly_cat = hourly_counts[["npu", "hour_ts"]].copy()
+
+    panel = (
+        hourly_counts
+        .merge(hourly_numeric, on=["npu", "hour_ts"], how="left")
+        .merge(hourly_cat, on=["npu", "hour_ts"], how="left")
+        .sort_values(["npu", "hour_ts"])
+        .reset_index(drop=True)
+    )
+
+    lags = [1, 3, 6, 12, 24, 168]
+    for lag in lags:
+        panel[f"lag_{lag}"] = panel.groupby("npu")["burglary_count"].shift(lag)
+
+    panel = panel.dropna(subset=[f"lag_{l}" for l in lags])
     return panel
 
-
-# -----------------------------------------------------------------------------
-# CARDS (DATASET + MODEL)
-# -----------------------------------------------------------------------------
 
 def generate_dataset_card(
     dataset_name: str,
@@ -376,64 +444,27 @@ def generate_dataset_card(
     group_col: str,
     out_dir: Path,
 ) -> None:
-    """
-    Kaggle-style and internal dataset description.
-    """
     n_rows, n_cols = df.shape
-    date_min = pd.to_datetime(df[date_col]).min()
-    date_max = pd.to_datetime(df[date_col]).max()
+    date_vals = pd.to_datetime(df[date_col])
+    date_min, date_max = date_vals.min(), date_vals.max()
 
-    is_panel = group_col in df.columns
+    card = f"""# Dataset Card: {dataset_name}
 
-    card = f"""# 📦 Dataset Card: {dataset_name}
+Rows: {n_rows:,}
+Cols: {n_cols}
+Target: {target_col}
+Date column: {date_col}
+Group column: {group_col}
+Date Range: {date_min} → {date_max}
 
-## Overview
-This dataset is part of the **Campus Burglary Risk Prediction** project for Atlanta.
-
-- **Rows:** {n_rows:,}
-- **Columns:** {n_cols}
-- **Date column:** `{date_col}`
-- **Date range:** {date_min} → {date_max}
-- **Target column:** `{target_col}`
-- **Grouping column:** `{group_col}` ({'panel data' if is_panel else 'flat data'})
-
-## Intended Use
-- Spatio-temporal modeling of burglary risk
-- Evaluation of baseline ML models and tree-based models
-- Comparison of rolling-origin CV vs simple train/test
-
-## Basic Schema (first 25 columns)
+First 25 dtypes:
+{df.dtypes.head(25).to_markdown()}
 """
 
-    schema_preview = (
-        df.dtypes.reset_index()
-        .rename(columns={"index": "column", 0: "dtype"})
-        .head(25)
-        .to_markdown(index=False)
+    (CARDS_DIR / f"{dataset_name}_dataset_card.md").write_text(
+        card, encoding="utf-8"
     )
-    card += f"\n{schema_preview}\n\n"
 
-    card += f"""
-## Train/Test Recommendation
-- Train on data **before {TRAIN_END}**
-- Test on data **from {TRAIN_END} onwards**
-
-## License / Ethics
-- Derived from Atlanta Police Department open data and external enrichment.
-- For research and educational use only.
-
-"""
-
-    # Save internal card
-    card_path = CARDS_DIR / f"{dataset_name}_dataset_card.md"
-    card_path.write_text(card, encoding="utf-8")
-
-    # Kaggle-facing version (slightly tweaked wording)
-    kaggle_card_path = CARDS_DIR / f"{dataset_name}_kaggle_card.md"
-    kaggle_card_path.write_text(card, encoding="utf-8")
-
-
-# Fixed generate_model_card_for_dataset function for rolling_cv.py
 
 def generate_model_card_for_dataset(
     dataset_name: str,
@@ -441,73 +472,52 @@ def generate_model_card_for_dataset(
     simple_results: pd.DataFrame,
     out_dir: Path,
 ) -> None:
-    """
-    Single markdown model card summarizing all models for this dataset.
-    """
     timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # align on model name
     simple = simple_results.set_index("Model")
     cv = cv_leaderboard.set_index("Model")
 
     models = sorted(set(simple.index) | set(cv.index))
+    rows: List[Dict] = []
 
-    rows = []
     for m in models:
         s = simple.loc[m] if m in simple.index else None
         c = cv.loc[m] if m in cv.index else None
-
-        row = {
-            "Model": m,
-            "Simple_MAE": float(s["MAE"]) if s is not None else np.nan,
-            "CV_Mean_MAE": float(c["Mean_MAE"]) if c is not None else np.nan,
-            "CV_Mean_RMSE": float(c["Mean_RMSE"]) if c is not None else np.nan,
-            "CV_Mean_R2": float(c["Mean_R2"]) if c is not None else np.nan,
-        }
-        rows.append(row)
+        rows.append(
+            {
+                "Model": m,
+                "Simple_MAE": float(s["MAE"]) if s is not None else np.nan,
+                "Simple_R2": float(s["R2"]) if s is not None else np.nan,
+                "CV_Mean_MAE": float(c["Mean_MAE"]) if c is not None else np.nan,
+                "CV_Mean_R2": float(c["Mean_R2"]) if c is not None else np.nan,
+            }
+        )
 
     summary_df = pd.DataFrame(rows)
-    table_md = summary_df.to_markdown(index=False)
+    if not summary_df["CV_Mean_R2"].isna().all():
+        best_model = (
+            summary_df.sort_values("CV_Mean_R2", ascending=False)
+            .iloc[0]["Model"]
+        )
+    else:
+        best_model = summary_df.sort_values("CV_Mean_MAE").iloc[0]["Model"]
 
-    # FIX: Build the card content
-    best_model = summary_df.sort_values('CV_Mean_MAE').iloc[0]['Model'] if not summary_df.empty else "N/A"
-    
-    card = f"""# 📊 Model Card: {dataset_name}
+    card = f"""# Model Card: {dataset_name}
 
-## Overview
-Performance summary for all models evaluated on {dataset_name}.
+Generated: {timestamp}
 
-**Generated:** {timestamp}
+## Summary Table
 
-## Model Comparison
+{summary_df.to_markdown(index=False)}
 
-{table_md}
-
-## Methodology
-- **Simple Split:** Train before {TRAIN_END}, test after
-- **Cross-Validation:** 4-fold rolling origin CV
-- **Primary Metric:** Mean Absolute Error (MAE)
-
-## Best Model
-Best performing model (by CV MAE): **{best_model}**
-
-## Interpretation
-- **Simple_MAE:** Performance on held-out 2024-2025 test set
-- **CV_Mean_MAE:** Average performance across 4 temporal folds
-- **Stability_Gap:** Difference between simple and CV MAE (lower is better)
-
----
-
-*For detailed fold-by-fold results, see `cv_results/{dataset_name}_cv_metrics.csv`*
-*For all predictions, see `cv_results/predictions/{dataset_name}_all_predictions.csv`*
+**Best model (by CV Mean R²):** **{best_model}**
 """
 
-    card_path = CARDS_DIR / f"{dataset_name}_model_card.md"
-    card_path.write_text(card, encoding="utf-8")
-    
-    console.print(f"[green]Model card saved:[/green] {card_path.name}")
+    (CARDS_DIR / f"{dataset_name}_model_card.md").write_text(
+        card, encoding="utf-8"
+    )
 
-# Primary run (per dataset)
+
 def run_for_dataset(
     dataset_name: str,
     df: pd.DataFrame,
@@ -522,29 +532,47 @@ def run_for_dataset(
         )
     )
 
-    out_dirs = ensure_output_dirs(TEST_RESULTS_ROOT / dataset_name)
+    wandb_run = None
+    if HAS_WANDB:
+        wandb_run = wandb.init(
+            project=WANDB_PROJECT,
+            entity=WANDB_ENTITY,
+            name=f"{dataset_name}_rolling_cv",
+            group=dataset_name,
+            dir=WANDB_OUTPUT_DIR,
+            config={
+                "dataset": dataset_name,
+                "target_col": target_col,
+                "date_col": date_col,
+                "group_col": group_col,
+                "train_end": TRAIN_END,
+            },
+        )
+
+    out_dirs = ensure_output_dirs(TEST_RESULTS_DIR / dataset_name)
     models = build_model_zoo()
 
-    # Feature selection
     feature_cols = get_feature_columns(df, target_col, date_col, group_col)
-    console.print(f"[green]{dataset_name}[/green] feature columns ({len(feature_cols)}): {feature_cols}")
+    console.print(
+        f"{dataset_name} features ({len(feature_cols)}): {feature_cols}"
+    )
 
-    # --- 1) Simple train/test (no rolling CV) ---
-    simple_results_path = out_dirs["base"] / "simple_results.csv"
-    simple_results = run_simple_split(
+    simple_path = out_dirs["base"] / "simple_results.csv"
+    simple_results, fitted_models = run_simple_split(
         models=models,
         df=df,
         target_col=target_col,
         date_col=date_col,
         feature_cols=feature_cols,
-        output_path=simple_results_path,
+        out_path=simple_path,
     )
 
-    # --- 2) Rolling-origin CV ---
-    cv_summary_rows: List[Dict] = []
+    cv_rows: List[Dict] = []
+    is_dense = dataset_name == "npu_dense_panel"
+    batch_size = 100_000 if is_dense else None
 
     for model_name, model in models.items():
-        metrics_df, preds_df = run_rolling_cv(
+        m_df, p_df = run_rolling_cv(
             model=model,
             df=df,
             target_col=target_col,
@@ -553,47 +581,113 @@ def run_for_dataset(
             feature_cols=feature_cols,
             cv_dirs=out_dirs,
             model_name=model_name,
+            batch_size=batch_size,
         )
 
-        if metrics_df.empty:
+        if m_df.empty:
             continue
 
-        # aggregate to single row for leaderboard
-        row = {
-            "Model": model_name,
-            "Mean_MAE": metrics_df["MAE"].mean(),
-            "Mean_RMSE": metrics_df["RMSE"].mean(),
-            "Mean_R2": metrics_df["R²"].mean(),
-            "Mean_MAPE": metrics_df["MAPE"].mean(),
-        }
-        cv_summary_rows.append(row)
+        cv_rows.append(
+            {
+                "Model": model_name,
+                "Mean_MAE": m_df["MAE"].mean(),
+                "Mean_RMSE": m_df["RMSE"].mean(),
+                "Mean_R2": m_df["R²"].mean(),
+                "Mean_MAPE": m_df["MAPE"].mean(),
+            }
+        )
 
-
-        if HAS_WANDB:
-            run = wandb.init(
-                project="Data Science Capstone - Final Tests",
-                entity="joshuadariuspina-georgia-state-university",
-                group="rolling_cv",
-                name=f"{dataset_name}_{model_name}_rolling_cv",
-                dir=WANDB_OUTPUT_DIR,
-                config={"dataset": dataset_name, "model": model_name},
-                reinit=True,
-                tags=["crime-forecasting", "capstone", "npu", "time-series"],
-            )
-            wandb.log(row)
-            run.finish()
-
-    if not cv_summary_rows:
-        console.print(f"[red]No CV results for {dataset_name}[/red]")
+    if not cv_rows:
+        console.print("[red]No CV results.[/red]")
+        if wandb_run is not None:
+            wandb_run.finish()
         return
 
-    cv_leaderboard = pd.DataFrame(cv_summary_rows).sort_values("Mean_MAE")
+    cv_leaderboard = pd.DataFrame(cv_rows).sort_values("Mean_MAE")
+    cv_leaderboard_path = out_dirs["base"] / "model_leaderboard_summary.csv"
+    cv_leaderboard.to_csv(cv_leaderboard_path, index=False)
 
-    # save leaderboard
-    leaderboard_path = out_dirs["base"] / "model_leaderboard_summary.csv"
-    cv_leaderboard.to_csv(leaderboard_path, index=False)
+    if HAS_WANDB and wandb_run is not None:
+        wandb.log(
+            {
+                "cv_leaderboard": wandb.Table(
+                    dataframe=cv_leaderboard.reset_index(drop=True)
+                )
+            }
+        )
 
-    # --- Cards ---
+    if not cv_leaderboard["Mean_R2"].isna().all():
+        best_row = cv_leaderboard.sort_values(
+            "Mean_R2", ascending=False
+        ).iloc[0]
+    else:
+        best_row = cv_leaderboard.sort_values("Mean_MAE").iloc[0]
+
+    best_model_name = best_row["Model"]
+    console.print(
+        f"[bold green]Best model for {dataset_name} (by CV Mean R²): "
+        f"{best_model_name}[/bold green]"
+    )
+
+    df_local = df.copy()
+    df_local[date_col] = pd.to_datetime(df_local[date_col])
+
+    train_df_full = df_local[df_local[date_col] < TRAIN_END]
+    X_train_full = train_df_full[feature_cols].fillna(0)
+    y_train_full = train_df_full[target_col]
+
+    best_model_obj = build_model_zoo()[best_model_name]
+    best_model_obj.fit(X_train_full, y_train_full)
+
+    dataset_art_dir = ARTIFACTS_DIR / dataset_name
+    dataset_art_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = dataset_art_dir / f"{dataset_name}_{best_model_name}_best_model.joblib"
+    joblib.dump(best_model_obj, model_path)
+
+    metadata = {
+        "dataset": dataset_name,
+        "best_model": best_model_name,
+        "selection_metric": "CV Mean R2",
+        "CV_Mean_R2": float(best_row["Mean_R2"]),
+        "CV_Mean_MAE": float(best_row["Mean_MAE"]),
+        "CV_Mean_RMSE": float(best_row["Mean_RMSE"]),
+        "CV_Mean_MAPE": float(best_row["Mean_MAPE"]),
+        "TRAIN_END": TRAIN_END,
+        "target_col": target_col,
+        "feature_cols": list(feature_cols),
+        "n_rows": int(df.shape[0]),
+        "n_cols": int(df.shape[1]),
+    }
+
+    metadata_path = dataset_art_dir / f"{dataset_name}_{best_model_name}_metadata.json"
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+
+    console.print(
+        f"[green]Saved best model artifact[/green]: {model_path.name}"
+    )
+
+    if HAS_WANDB and wandb_run is not None:
+        model_artifact = wandb.Artifact(
+            name=f"{dataset_name}-{best_model_name}-best-model",
+            type="model",
+            description=(
+                f"Best {dataset_name} model selected by CV Mean R² "
+                f"(train < {TRAIN_END})."
+            ),
+            metadata=metadata,
+        )
+        model_artifact.add_file(model_path)
+        model_artifact.add_file(metadata_path)
+
+        wandb_run.log_artifact(model_artifact)
+
+        wandb_run.summary["best_model"] = best_model_name
+        wandb_run.summary["best_CV_Mean_R2"] = metadata["CV_Mean_R2"]
+        wandb_run.summary["best_CV_Mean_MAE"] = metadata["CV_Mean_MAE"]
+        wandb_run.summary["best_CV_Mean_RMSE"] = metadata["CV_Mean_RMSE"]
+
     generate_dataset_card(
         dataset_name=dataset_name,
         df=df,
@@ -612,178 +706,122 @@ def run_for_dataset(
 
     console.print(
         Panel(
-            f"[bold green]Finished dataset {dataset_name}. "
-            f"Results in: {out_dirs['base']}[/bold green]",
+            f"[green]Finished dataset {dataset_name}[/green]",
             border_style="green",
         )
     )
 
+    if wandb_run is not None:
+        wandb_run.finish()
 
-# -----------------------------------------------------------------------------
-# ENTRYPOINT
-# -----------------------------------------------------------------------------
 
 def main() -> None:
-    console.print(
-        Panel(
-            "[bold cyan]Multi-dataset modeling: sparse, dense, target[/bold cyan]",
-            border_style="cyan",
-        )
-    )
+    console.print(Panel("[bold cyan]Multi-dataset modeling: sparse, target, dense[/bold cyan]"))
 
-    # Sparse panel
+    ds = "npu_sparse_panel"
     if DATA_SPARSE.exists():
         df_sparse = load_sparse_panel(DATA_SPARSE)
         run_for_dataset(
-            dataset_name="npu_sparse_panel",
+            dataset_name=ds,
             df=df_sparse,
-            target_col="burglary_count",
+            target_col=TARGET_MAP[ds],
             date_col="hour_ts",
             group_col="npu",
         )
     else:
         console.print(f"[red]Missing: {DATA_SPARSE}[/red]")
 
-    # Dense panel
+    ds = "target_crimes_panel"
+    if DATA_TARGET_PANEL.exists():
+        df_target_panel = load_sparse_panel(DATA_TARGET_PANEL)
+        run_for_dataset(
+            dataset_name=ds,
+            df=df_target_panel,
+            target_col=TARGET_MAP[ds],
+            date_col="hour_ts",
+            group_col="npu",
+        )
+    else:
+        console.print(f"[red]Missing: {DATA_TARGET_PANEL}[/red]")
+
+    ds = "npu_dense_panel"
     if DATA_DENSE.exists():
         df_dense = load_dense_panel(DATA_DENSE)
+        MAX_DENSE_ROWS = 300_000
+        n_dense = len(df_dense)
+        if n_dense > MAX_DENSE_ROWS:
+            console.print(
+                f"[yellow]Downsampling dense panel from {n_dense:,} → "
+                f"{MAX_DENSE_ROWS:,} rows for modeling (OOM guard).[/yellow]"
+            )
+            df_dense = df_dense.sample(
+                n=MAX_DENSE_ROWS, random_state=42
+            ).sort_values("hour_ts")
+
         run_for_dataset(
-            dataset_name="npu_dense_panel",
+            dataset_name=ds,
             df=df_dense,
-            target_col="burglary_count",
+            target_col=TARGET_MAP[ds],
             date_col="hour_ts",
             group_col="npu",
         )
     else:
         console.print(f"[red]Missing: {DATA_DENSE}[/red]")
 
-    # Target crimes → panel
-    if DATA_TARGET.exists():
-        df_target_panel = load_target_crimes_as_panel(DATA_TARGET)
-        run_for_dataset(
-            dataset_name="target_crimes_panel",
-            df=df_target_panel,
-            target_col="burglary_count",
-            date_col="hour_ts",
-            group_col="npu",
-        )
-    else:
-        console.print(f"[red]Missing: {DATA_TARGET}[/red]")
 
-# -----------------------------------------------------------------------------
-# GLOBAL COMBINED LEADERBOARD
-# -----------------------------------------------------------------------------
-def build_combined_leaderboard():
+def build_combined_leaderboard() -> None:
     console.print(
         Panel(
-            "[bold magenta]Building Combined Leaderboard (All Datasets)[/bold magenta]",
+            "[bold magenta]Building Combined Leaderboard[/bold magenta]",
             border_style="magenta",
         )
     )
 
-    combined_rows = []
-
-    for dataset_folder in ["npu_sparse_panel", "npu_dense_panel", "target_crimes_panel"]:
-        base_dir = TEST_RESULTS_ROOT / dataset_folder
-        cv_path = base_dir / "model_leaderboard_summary.csv"
-        simple_path = base_dir / "simple_results.csv"
+    rows: List[Dict] = []
+    for folder in ["npu_sparse_panel", "npu_dense_panel", "target_crimes_panel"]:
+        base = TEST_RESULTS_DIR / folder
+        cv_path = base / "model_leaderboard_summary.csv"
+        simple_path = base / "simple_results.csv"
 
         if not (cv_path.exists() and simple_path.exists()):
-            console.print(f"[yellow]Skipping {dataset_folder} (missing files)[/yellow]")
             continue
 
-        cv_df = pd.read_csv(cv_path)
-        simple_df = pd.read_csv(simple_path)
+        cv_df = pd.read_csv(cv_path).set_index("Model")
+        s_df = pd.read_csv(simple_path).set_index("Model")
 
-        cv_df = cv_df.set_index("Model")
-        simple_df = simple_df.set_index("Model")
+        for m in sorted(set(cv_df.index) | set(s_df.index)):
+            cv_row = cv_df.loc[m] if m in cv_df.index else None
+            s_row = s_df.loc[m] if m in s_df.index else None
 
-        all_models = sorted(set(cv_df.index) | set(simple_df.index))
+            rows.append(
+                {
+                    "Dataset": folder,
+                    "Model": m,
+                    "CV_Mean_MAE": cv_row["Mean_MAE"]
+                    if cv_row is not None
+                    else np.nan,
+                    "CV_Mean_R2": cv_row["Mean_R2"]
+                    if cv_row is not None
+                    else np.nan,
+                    "Simple_MAE": s_row["MAE"]
+                    if s_row is not None
+                    else np.nan,
+                    "Simple_R2": s_row["R2"]
+                    if s_row is not None
+                    else np.nan,
+                }
+            )
 
-        for model in all_models:
-            cv_row = cv_df.loc[model] if model in cv_df.index else None
-            simple_row = simple_df.loc[model] if model in simple_df.index else None
-
-            combined_rows.append({
-                "Dataset": dataset_folder,
-                "Model": model,
-                "CV_Mean_MAE": cv_row["Mean_MAE"] if cv_row is not None else np.nan,
-                "CV_Mean_RMSE": cv_row["Mean_RMSE"] if cv_row is not None else np.nan,
-                "CV_Mean_R2": cv_row["Mean_R2"] if cv_row is not None else np.nan,
-                "Simple_MAE": simple_row["MAE"] if simple_row is not None else np.nan,
-                "Simple_RMSE": simple_row["RMSE"] if simple_row is not None else np.nan,
-                "Simple_R2": simple_row["R2"] if simple_row is not None else np.nan,
-                "Stability_Gap": (
-                    (simple_row["MAE"] - cv_row["Mean_MAE"])
-                    if (cv_row is not None and simple_row is not None)
-                    else np.nan
-                ),
-            })
-
-    combined_df = pd.DataFrame(combined_rows)
-
-    if combined_df.empty:
-        console.print("[red]No combined leaderboard could be built.[/red]")
+    if not rows:
+        console.print("[red]No combined results.[/red]")
         return
 
-    # Rank models globally
-    combined_df["Global_Rank"] = combined_df["CV_Mean_MAE"].rank()
-
-    # Save CSV
-    combined_path = TEST_RESULTS_ROOT / "combined_leaderboard.csv"
-    combined_df.to_csv(combined_path, index=False)
-
-    # Save Markdown
-    md_path = TEST_RESULTS_ROOT / "combined_leaderboard.md"
-    md_path.write_text(combined_df.to_markdown(index=False), encoding="utf-8")
-
-    # Print table
-    table = Table(title="Combined Leaderboard (All Datasets)", show_header=True)
-    for col in ["Dataset", "Model", "CV_Mean_MAE", "Simple_MAE", "Stability_Gap", "Global_Rank"]:
-        table.add_column(col, style="cyan")
-
-    for _, row in combined_df.sort_values("Global_Rank").iterrows():
-        table.add_row(
-            row["Dataset"],
-            row["Model"],
-            f"{row['CV_Mean_MAE']:.4f}" if pd.notna(row["CV_Mean_MAE"]) else "-",
-            f"{row['Simple_MAE']:.4f}" if pd.notna(row["Simple_MAE"]) else "-",
-            f"{row['Stability_Gap']:.4f}" if pd.notna(row["Stability_Gap"]) else "-",
-            f"{int(row['Global_Rank'])}"
-        )
-
-    console.print(table)
-
-    # Scatterplot
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-
-    plt.figure(figsize=(10, 6))
-    sns.scatterplot(
-        data=combined_df,
-        x="CV_Mean_MAE",
-        y="Simple_MAE",
-        hue="Model",
-        style="Dataset",
-        s=120,
-    )
-    plt.title("Stability: CV Mean MAE vs Simple MAE")
-    plt.xlabel("Rolling CV Mean MAE")
-    plt.ylabel("Simple Split MAE")
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
-
-    plot_path = LEADERBOARD_DIR / "combined_leaderboard_scatter.png"
-
-    plt.savefig(plot_path, dpi=200)
-
-    console.print(f"[bold green]✓ Combined leaderboard saved[/bold green]: {combined_path}")
-    console.print(f"[bold green]✓ Scatterplot saved[/bold green]: {plot_path}")
+    df = pd.DataFrame(rows)
+    combined_path = TEST_RESULTS_DIR / "combined_leaderboard.csv"
+    df.to_csv(combined_path, index=False)
+    console.print(f"[green]Saved combined leaderboard![/green] → {combined_path}")
 
 
-# ---------------------------------------------------------------------------
-# CALL GLOBAL LEADERBOARD AFTER MAIN
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     main()
     build_combined_leaderboard()

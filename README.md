@@ -1,67 +1,151 @@
-# Data Science Capstone Project (Fall 2025)
+# Spatiotemporal Forecasting of Burglary Risk in Atlanta
 
-## **Spatiotemporal Forecasting of Burglary Risk in Atlanta**
+**Data Science Capstone Project - Fall 2025**
 
-## Abstract 
+A modular, end-to-end machine learning pipeline that transforms raw Atlanta Police Department data into actionable crime forecasts using spatial-temporal analysis, advanced feature engineering, and ensemble modeling.
 
-Routine Activity Theory posits that crime requires the convergence of a motivated offender, a suitable target, and the lack of a capable guardian. Applied to Atlanta’s university districts, this framework highlights the urgent need for proactive rather than reactive safety measures. This project focuses on forecasting burglary and larceny risks across Atlanta’s 25 Neighborhood Planning Units (NPUs) to improve campus safety.
+---
 
-Leveraging the Atlanta Police Department's Open Data Portal (2021–Present), we constructed an automated ETL pipeline to engineer spatiotemporal features, including semester schedules and time-of-day dynamics. We benchmark traditional time-series models against machine learning algorithms (Random Forest, XGBoost, & Prophet) to forecast incident counts. 
+## Project Overview
 
-Models are evaluated using RMSE and MAE to assess their utility for real-world resource allocation.
+Routine Activity Theory posits that crime requires the convergence of a motivated offender, a suitable target, and the absence of a capable guardian. Applied to Atlanta's university districts, this framework highlights the urgent need for proactive rather than reactive safety measures.
 
-Our final deliverable is an interactive GIS dashboard allowing stakeholders to visualize predicted risk levels. By identifying daily and seasonal trends, this tool empowers university administrators, law enforcement, and students to make data-driven decisions regarding patrol staffing and safer housing choices.
+This project focuses on forecasting **burglary and larceny risks** across Atlanta's 25 Neighborhood Planning Units (NPUs) to improve campus safety for Metro Atlanta colleges.
 
+### Goals
 
+- Forecast **hourly burglary risk** across Atlanta's 25 NPUs
+- Deliver actionable insights through an **interactive dashboard**
+- Support proactive safety strategies for university administrators, law enforcement, and students
+- Benchmark multiple forecasting approaches (Naive Seasonal, Random Forest, XGBoost, CatBoost, LightGBM, ZIP, Prophet)
 
-## 🧑‍🚀 Team
+### Methodology
 
-We are an student research team bringing together our technical expertise to build models aimed at reducing burglary risk near Metro Atlanta college campuses.
+Leveraging the Atlanta Police Department's Open Data Portal (2021–Present), we constructed an automated ETL pipeline with:
 
-Data Science Team (Alphabetically): Gunn Madan, Harini Mohan, Joshua Piña, Yuntian Wu
+- **Spatial enrichment**: NPU boundaries, campus proximity, zone mappings
+- **Temporal features**: Cyclical encodings, holidays, hour blocks, lagged values
+- **Weather integration**: Hourly temperature and precipitation data
+- **Grid-based density**: Rolling statistics and spatial crime patterns
 
+Models are evaluated using **R²**, **RMSE**, and **MAE** via rolling cross-validation to assess predictive performance and real-world utility for resource allocation.
 
-## Goals
+---
 
-- To design and implement a predictive modeling and visualization system that:
-   - Forecasts hourly and daily burglary risk in each of Atlanta's 25 NPU's.
-   - Delivers actionable insights through an interactive dashboard to support proactive safety strategies.
+## Benchmark Dataset
 
+This project produces a publicly available benchmark dataset for spatiotemporal crime forecasting research.
+
+### Quick Links
+
+- **Dataset**: [Kaggle - Core Atlanta Burglary-Related Crimes (2021-2025)](https://www.kaggle.com/datasets/joshuapina/core-atlanta-burglary-related-crimes-2021-2025)
+- **Full Documentation**: [DATASET_CARD.md](DATASET_CARD.md)
+- **Reproducibility Guide**: [DATA_GENERATION_PIPELINE.md](DATA_GENERATION_PIPELINE.md)
+- **Data Dictionary**: [data_dictionary.md](data_dictionary.md)
+
+### Dataset Highlights
+
+- **117,749 incidents**: Raw burglary/larceny reports (2021-2025)
+- **99,965 observations**: Target and sparse panels (hourly NPU-level with incidents)
+- **1,074,500 observations**: Dense panel (complete hourly NPU grid)
+- **Rich features**: Temporal, spatial, and weather variables
+- **Fully reproducible**: Complete pipeline in `atl_model_pipelines/`
+- **Research-grade**: Comprehensive documentation and quality checks
+
+### Reproduce the Dataset
+
+```bash
+# Run data generation pipeline
+python -m atl_model_pipelines.ingestion.ingestion_master
+python -m atl_model_pipelines.transform.transform_master
+python -m atl_model_pipelines.validate.orchestrator
+
+# Output: data/processed/npu_dense_panel.parquet
+```
+
+### Citation
+
+If you use this dataset in research or publication:
+
+```bibtex
+@dataset{atlanta_burglary_2025,
+  title={Core Atlanta Burglary-Related Crimes (2021-2025)},
+  author={Madan, Gunn and Mohan, Harini and Piña, Joshua and Wu, Yuntian Robin},
+  year={2025},
+  institution={Georgia State University},
+  url={https://www.kaggle.com/datasets/joshuapina/core-atlanta-burglary-related-crimes-2021-2025}
+}
+```
+
+---
+
+## Quick Start
+
+### Option 1: GitHub Codespaces (Recommended)
+
+1. Click the green **Code** button on this repository
+2. Select **Open with Codespaces** → **New codespace**
+3. Wait for environment to build (includes all dependencies)
+
+### Option 2: Local Setup
+
+```bash
+# Clone repository
+git clone https://github.com/gsu-ds/campus-burglary-risk-prediction.git
+cd campus-burglary-risk-prediction
+
+# Install dependencies (Python 3.10+)
+pip install -r requirements.txt
+
+# Optional: Install all model libraries
+pip install scikit-learn xgboost lightgbm catboost prophet wandb
+```
+
+---
 
 ## Infrastructure & Tech Stack
-- Communication Tools: [Slack](https://join.slack.com/t/gsudatascienc-2cp1426/shared_invite/zt-3e29bsar7-I0lsBoRp1i8J1o6TkleC3w)
-- Version Control System: [GitHub](https://github.com/gsu-ds/campus-burglary-risk-prediction)
-- Frontend Application: [Streamlit](https://atlanta-risk-prediction.streamlit.app) 
-- Dataset: [Kaggle](https://www.kaggle.com/datasets/joshuapina/core-atlanta-burglary-related-crimes-2021-2025)
-- Database: [Supabase(PostgreSQL)](https://supabase.com/dashboard/project/huhkmlefmbxxsgewvrgm/settings/general)
-- Project Management Tools: [GitHub Projects](https://github.com/orgs/gsu-ds/projects/1)
-- Document Sharing: [Google Drive](https://drive.google.com/drive/folders/1dYm1BG9t2Ah-jAVDn6VQCJ11P3_9P-fS?usp=drive_link)
-- Experiment Tracking: [W&B](https://wandb.ai/joshuadariuspina-georgia-state-university/atl-crime-hourly-forecast)
 
-##  Development Environment
-
-This project uses [GitHub Codespaces](https://github.com/features/codespaces) to ensure a consistent, reproducible development setup.
-
---- 
-
-### Quick Start
-
-1. **Open in Codespaces**  
-   Click the green **Code** button on this repository, then choose **Open with Codespaces** → **New codespace**.
-
-2. **Automatic setup**  
-   The dev container will automatically install Python and all required packages listed in `requirements.txt`.
-
-3. **Activate the environment**  
-   When your Codespace starts, you’re ready to run scripts and notebooks immediately.
-   - If (dsci_env) does not show in terminal, follow these steps:
-      - Activate virtual env: (bash)-> source dsci_env/bin/activate or powershell-> ( dsci_env\Activate\scripts)
-      - Use requirements.txt to ensure installations: pip install -r requirements.txt
+| Component | Tool | Link |
+|-----------|------|------|
+| **Frontend Dashboard** | Streamlit | [Live Demo](https://campus-burglary-risk-prediction.streamlit.app/) |
+| **Dataset** | Kaggle | [Dataset Page](https://www.kaggle.com/datasets/joshuapina/core-atlanta-burglary-related-crimes-2021-2025) |
+| **Version Control** | GitHub | [Repository](https://github.com/gsu-ds/campus-burglary-risk-prediction) |
+| **Database** | Supabase (PostgreSQL) | [Dashboard](https://supabase.com/dashboard/project/huhkmlefmbxxsgewvrgm/settings/general) |
+| **Experiment Tracking** | Weights & Biases | [Project Board](https://wandb.ai/joshuadariuspina-georgia-state-university/atl-crime-hourly-forecast) |
 
 ---
 
-## Project Website
+## Team
 
-👉 [Project Page ((In Development)](https://atlanta-risk-prediction.streamlit.app)
+**Data Science Team** (Alphabetically):  
+Gunn Madan, Harini Mohan, Joshua Piña, Yuntian Wu
+
+**Institution**: Georgia State University
 
 ---
+
+## Contact & Support
+
+### GitHub Issues
+[Report bugs or request features](https://github.com/gsu-ds/campus-burglary-risk-prediction/issues)
+
+### Email
+- Joshua Piña: jpina4@student.gsu.edu
+- Yuntian Wu: ywu49@student.gsu.edu
+- Gunn Madan: gmadan1@student.gsu.edu
+- Harini Mohan: hmohan1@student.gsu.edu
+
+---
+
+## References
+
+1. Atlanta Police Department. (2025). Crime Data Downloads.
+2. Open-Meteo. (2025). Historical Weather API.
+3. City of Atlanta. (2025). NPU Boundaries Open Data.
+
+---
+
+## License
+
+**Dataset**: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)  
+**Code**: MIT License

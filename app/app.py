@@ -7,28 +7,6 @@ import numpy as np
 st.set_page_config(page_title="Atlanta Burglary Risk", layout="wide")
 
 @st.cache_data
-def load_forecasts(model_name="RandomForest"):
-    path = (
-        Path("outputs")
-        / "december"
-        / "cv_results"
-        / "predictions"
-        / f"{model_name}_all_predictions.csv"
-    )
-    if not path.exists():
-        return None
-
-    df = pd.read_csv(path, parse_dates=["hour_ts"])
-    df = df.rename(
-        columns={
-            "hour_ts": "datetime",
-            "burglary_count": "actual",
-            "predicted": "pred",
-        }
-    )
-    return df
-
-@st.cache_data
 def load_data():
     parquet_path = Path("data/processed/apd/target_crimes.parquet")
     csv_path = Path("data/processed/apd/target_crimes.csv")
@@ -48,7 +26,7 @@ def load_data():
             df = df.rename(columns={col: "datetime"})
             break
     if "datetime" not in df.columns:
-        raise ValueError("Could not find a datetime column in target_crimes.csv")
+        raise ValueError("Could not find a datetime column in target_crimes")
 
     if "npu" not in df.columns:
         if "npu_right" in df.columns or "npu_left" in df.columns:
@@ -83,36 +61,56 @@ def load_data():
 
     return df
 
-df = load_data()
-
 @st.cache_data
-def load_forecasts(model_name="RandomForest"):
-    """
-    Load rolling-CV prediction results for a given model.
+def load_forecasts():
+    """Load all model predictions from CV results."""
+    base_dirs = [
+        Path("reports/test_results/npu_sparse_panel/cv_results/predictions"),
+        Path("reports/test_results/target_crimes_panel/cv_results/predictions"),
+        Path("reports/test_results/npu_dense_panel/cv_results/predictions"),
+    ]
+    
+    dfs = []
+    for base_dir in base_dirs:
+        if not base_dir.exists():
+            continue
 
-    """
-    path = (
-        Path("outputs")
-        / "december"
-        / "cv_results"
-        / "predictions"
-        / f"{model_name}_all_predictions.csv"
-    )
+        for csv_file in sorted(base_dir.glob("*_all_predictions.csv")):
+            model_name = csv_file.stem.replace("_all_predictions", "")
+            dataset_name = base_dir.parent.parent.name
+            
+            try:
+                df = pd.read_csv(csv_file)
 
-    if not path.exists():
+                rename_map = {}
+                for col in df.columns:
+                    col_lower = col.lower()
+                    if col_lower in ["hour_ts", "datetime"]:
+                        rename_map[col] = "datetime"
+                    elif col_lower in ["burglary_count", "crime_count", "actual", "y_true"]:
+                        rename_map[col] = "actual"
+                    elif col_lower in ["predicted", "pred"]:
+                        rename_map[col] = "predicted"
+                
+                df = df.rename(columns=rename_map)
+                
+                if "datetime" in df.columns:
+                    df["datetime"] = pd.to_datetime(df["datetime"])
+                
+                df["model"] = model_name
+                df["dataset"] = dataset_name
+                dfs.append(df)
+                
+            except Exception as e:
+                st.warning(f"Failed to load {csv_file.name}: {e}")
+                continue
+    
+    if not dfs:
         return None
+    
+    return pd.concat(dfs, ignore_index=True)
 
-    df = pd.read_csv(path, parse_dates=["hour_ts"])
-
-    # Standardize column names for plotting
-    df = df.rename(
-        columns={
-            "hour_ts": "datetime",
-            "burglary_count": "actual",
-            "predicted": "pred",
-        }
-    )
-    return df
+df = load_data()
 
 st.title("Spatiotemporal Forecasting of Burglary Risk in Atlanta")
 
@@ -124,17 +122,15 @@ with nav3:
 with nav4:
     st.markdown("[Final Presentation](https://docs.google.com/presentation/d/1OrThUntGbi8fWF3Qqyw-xHaza5_X8Qha0KVonl19IV8/edit?slide=id.gc6f80d1ff_0_0#slide=id.gc6f80d1ff_0_0)")
 with nav5:
-    st.markdown(
-        "[GitHub Repo](https://github.com/gsu-ds/campus-burglary-risk-prediction)"
-    )
+    st.markdown("[GitHub Repo](https://github.com/gsu-ds/campus-burglary-risk-prediction)")
 
 st.markdown("---")
 
-st.markdown("## About", help=None)
+st.markdown("## About")
 
 st.markdown(
     """
-This dashboard explores **burglary and larceny risk around Atlanta’s major universities**
+This dashboard explores **burglary and larceny risk around Atlanta's major universities**
 using Atlanta Police Department (APD) incident data enriched with **time, weather, and
 spatial features**.
 
@@ -253,19 +249,6 @@ if has_npu and selected_npu_cta and selected_tb is not None:
 elif not has_npu:
     st.info("NPU column not found in the dataset, so NPU-specific views are disabled.")
 
-
-    if not subset_cta.empty:
-        # Simple baseline-ish metric: average incidents in that NPU x time block
-        daily_counts = subset_cta.groupby("date").size()
-        avg_incidents = daily_counts.mean()
-        st.info(
-            f"On average, NPU **{selected_npu_cta}** sees about "
-            f"**{avg_incidents:0.2f} incidents per day** in the "
-            f"**{selected_tb}** time block over the selected years."
-        )
-    else:
-        st.info("No incidents found for this NPU/time block combination.")
-
 st.divider()
 
 tab_explore, tab_models, tab_sources, tab_faq = st.tabs(
@@ -284,7 +267,6 @@ with tab_explore:
     if df_view.empty:
         st.info("No data for this filter combo.")
     else:
-        # Daily counts + 7-day rolling avg to reduce noise
         ts = (
             df_view.groupby("date")
             .size()
@@ -369,7 +351,7 @@ with tab_explore:
                         data=map_data_records,
                         get_position="[lon, lat]",
                         get_radius="200 + risk_level * 1200",
-                        get_fill_color=[255, 140, 0, 160],  # list, not string
+                        get_fill_color=[255, 140, 0, 160],
                         pickable=True,
                     )
                 ],
@@ -387,86 +369,42 @@ with tab_models:
     st.markdown("### How the forecasts are generated")
     st.markdown(
         """
-We compare simple **baseline models** with more expressive models:
+We compare multiple regression models:
 
 **Baselines**
-- **NaiveMean** – always predicts the global mean hourly count.
-- **NaiveLastHour** – predicts the last observed value for that NPU.
-- **SeasonalWeekly** – predicts the mean for that NPU and hour-of-week.
+- **BaselineMean** – always predicts the global mean count.
+- **LinearRegression** – simple linear model.
 
-**Models**
-- **RandomForest** – tree-based regressor using time, weather, and spatial features.
-- **PoissonGLM** – generalized linear model tailored to count data.
+**Advanced Models**
+- **RandomForest** – tree-based ensemble using time, weather, and spatial features.
+- **XGBRegressor** – gradient boosted trees.
+- **CatBoostRegressor** – gradient boosting optimized for categorical features.
 
-Models are evaluated with **rolling time-series cross-validation**:
-we train on earlier hours and validate on later periods (2022–2024),
-then aggregate metrics across folds.
+Models are evaluated with **4-fold rolling time-series cross-validation**:
+we train on earlier periods and validate on later periods (2022-2024),
+then aggregate metrics across folds. The best model is selected by CV Mean R².
         """
     )
 
     st.markdown("### Forecast results & demo")
 
-    @st.cache_data
-    def load_forecasts():
-        base_dir = Path("outputs/december/cv_results/predictions")
-        if not base_dir.exists():
-            return None
-
-        dfs = []
-        for f in sorted(base_dir.glob("*_all_predictions.csv")):
-            # e.g. RandomForest_all_predictions.csv -> RandomForest
-            model_name = f.stem.replace("_all_predictions", "")
-            df_f = pd.read_csv(f)
-
-            # normalize datetime column name
-            if "hour_ts" in df_f.columns:
-                df_f["datetime"] = pd.to_datetime(df_f["hour_ts"])
-            elif "datetime" in df_f.columns:
-                df_f["datetime"] = pd.to_datetime(df_f["datetime"])
-            else:
-                continue
-
-            # normalize actual / predicted column names
-            rename = {}
-            for c in df_f.columns:
-                cl = c.lower()
-                if cl in ["actual", "y_true", "burglary_count", "count"]:
-                    rename[c] = "actual"
-                if cl in ["pred", "predicted"] or cl.endswith("_pred"):
-                    rename[c] = "predicted"
-            df_f = df_f.rename(columns=rename)
-
-            if "actual" not in df_f.columns or "predicted" not in df_f.columns:
-                continue
-
-            # normalize NPU + model column
-            if "npu" not in df_f.columns and "NPU" in df_f.columns:
-                df_f = df_f.rename(columns={"NPU": "npu"})
-
-            df_f["model"] = model_name
-            dfs.append(df_f)
-
-        if not dfs:
-            return None
-
-        return pd.concat(dfs, ignore_index=True)
-
     forecast_df = load_forecasts()
 
     if forecast_df is None:
         st.info(
-            "Forecast results not found yet. Once the modeling notebook exports "
-            "`*_all_predictions.csv` into `outputs/december/cv_results/predictions/`, "
-            "this section will show model performance and interactive forecasts."
+            "Forecast results not found. Run the rolling_cv.py script to generate predictions."
         )
     else:
-        # --- model selection ---
-        model_options = sorted(forecast_df["model"].unique())
+        dataset_options = sorted(forecast_df["dataset"].unique())
+        dataset_choice = st.selectbox("Dataset", dataset_options)
+        
+        df_dataset = forecast_df[forecast_df["dataset"] == dataset_choice]
+        
+        model_options = sorted(df_dataset["model"].unique())
         model_choice = st.selectbox("Model to visualize", model_options)
 
-        df_model = forecast_df[forecast_df["model"] == model_choice].copy()
+        df_model = df_dataset[df_dataset["model"] == model_choice].copy()
 
-        # overall metrics for the selected model
         y_true_all = df_model["actual"].to_numpy()
         y_pred_all = df_model["predicted"].to_numpy()
         overall_rmse = float(np.sqrt(((y_true_all - y_pred_all) ** 2).mean()))
@@ -478,7 +416,6 @@ then aggregate metrics across folds.
         with c2:
             st.metric("Overall MAE", f"{overall_mae:.2f}")
 
-        # --- per-NPU time series ---
         st.markdown("#### Per-NPU forecast")
 
         available_npus = sorted(df_model["npu"].dropna().unique())
@@ -502,7 +439,7 @@ then aggregate metrics across folds.
 
                 st.line_chart(plot_df)
                 st.caption(
-                    "Actual vs. predicted hourly incident counts for the selected NPU "
+                    "Actual vs. predicted counts for the selected NPU "
                     "across the rolling cross-validation folds."
                 )
 
@@ -515,8 +452,8 @@ with tab_sources:
 - **Spatial features:** NPUs, APD Zones, campus footprints, neighborhoods, and cities
   from local shapefiles.
 
-All of this is processed into `data/processed/apd/target_crimes.csv`, which aggregates
-time, weather, and spatial features for each NPU and time-of-day block.
+All of this is processed into panel datasets with time, weather, and spatial features
+for each NPU and hour.
         """
     )
 
@@ -535,11 +472,14 @@ Higher forecasted counts indicate times and locations where incidents are more l
 **Can these forecasts be used to predict individual crimes?**  
 No. The goal is *strategic* insight (e.g., where/when risk is higher) rather than
 predicting specific incidents or individuals.
+
+**Which model performs best?**  
+CatBoostRegressor typically achieves the best CV R² scores across datasets. Check the
+model comparison tab to see performance metrics.
         """
     )
     
 st.markdown("---")
 st.caption(
-    "Built by the GSU Data Science Capstone Group 3 (Fall 2025). Data: APD burglary & larceny reports, weather from Open-Meteo."
+    "Built by the GSU Data Science Capstone Group 3 (Fall 2024). Data: APD burglary & larceny reports, weather from Open-Meteo."
 )
-
