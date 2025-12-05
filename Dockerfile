@@ -7,16 +7,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y gcc g++ git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install deps first (FastAPI, uvicorn, pydantic, joblib, pandas)
-COPY api/requirements.txt . # Assuming API requirements are separate
+# Install FastAPI dependencies
+COPY api/requirements.txt . 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy API source code
 COPY ./api ./api
-COPY ./utils ./utils
-
-# COPY ARTIFACTS: This is CRITICAL for the API service to load the models.
-COPY ./artifacts ./artifacts
+# Removed COPY commands for artifacts/reports/utils because they are either handled by volumes or don't exist.
 
 ENV PYTHONPATH=/app
 
@@ -32,15 +29,15 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Streamlit and dependencies, including 'requests' for API communication
-COPY requirements.txt . # Assuming Streamlit requirements are here
+# Install Streamlit dependencies (includes 'requests')
+COPY requirements.txt . 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy Streamlit app and supporting files
+# Copy Streamlit app and configuration file
 COPY streamlit_app.py .
 COPY config.py .
-COPY data/ ./data/
-COPY reports/ ./reports/
+
+# Removed COPY commands for data/reports because they are handled by volumes.
 
 EXPOSE 8501
 
