@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy API source code
 COPY ./api ./api
-# Removed COPY commands for artifacts/reports/utils because they are either handled by volumes or don't exist.
+# Note: Artifacts, reports, and utils are excluded here, relying on volume mounts.
 
 ENV PYTHONPATH=/app
 
@@ -34,10 +34,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy Streamlit app and configuration file
-COPY streamlit_app.py .
+# FIXED PATH: Copies from the subdirectory where streamlit_app.py is located.
+COPY streamlit_app/streamlit_app.py .
+# config.py is correctly copied from the root.
 COPY config.py .
 
-# Removed COPY commands for data/reports because they are handled by volumes.
+# Note: Data/reports are excluded here, relying on volume mounts.
 
 EXPOSE 8501
 

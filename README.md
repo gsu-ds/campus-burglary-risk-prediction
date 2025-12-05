@@ -107,7 +107,7 @@ pip install scikit-learn xgboost lightgbm catboost prophet wandb
 
 | Component | Tool | Link |
 |-----------|------|------|
-| **Frontend Dashboard** | Streamlit | [Live Demo](https://campus-burglary-risk-prediction.streamlit.app/) |
+| **Frontend Dashboard** | Streamlit/Render | [Live Demo](https://atl-crime-api.onrender.com/) |
 | **Dataset** | Kaggle | [Dataset Page](https://www.kaggle.com/datasets/joshuapina/core-atlanta-burglary-related-crimes-2021-2025) |
 | **Version Control** | GitHub | [Repository](https://github.com/gsu-ds/campus-burglary-risk-prediction) |
 | **Database** | Supabase (PostgreSQL) | [Dashboard](https://supabase.com/dashboard/project/huhkmlefmbxxsgewvrgm/settings/general) |
