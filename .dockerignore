@@ -20,9 +20,9 @@ notebooks/
 
 # --- 4. Ignore large artifacts and results ---
 archive/
-artifacts/
+
 outputs/
-reports/
+
 packaged_models/
 test_results/
 
