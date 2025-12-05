@@ -92,7 +92,7 @@ def load_forecasts():
         model_name = model_info['model_name']
         
         # 2. Call the /forecast endpoint for each best model's historical CV results
-        forecast_url = f"{API_BASE_URL}/forecast/{dataset_name}/{model_name}?limit=100000" 
+        forecast_url = f"{API_BASE_URL}/forecast/{dataset_name}/{model_name}?limit=10000" 
         
         try:
             forecast_response = requests.get(forecast_url, timeout=30) 
@@ -135,7 +135,7 @@ nav1, nav2, nav3, nav4, nav5 = st.columns([2, 1, 1, 1, 1])
 with nav2:
     st.markdown("[Project Abstract](https://docs.google.com/document/d/1PreU-Ik2mYIIW4Ja753anvFQFjZGCTmt4FpvtWkVoes/edit?tab=t.5o4kiuwqlscf#heading=h.b7u8zxwyyq9c)")
 with nav3:
-    st.markdown("[Data & Sources](https://www.kaggle.com/datasets/joshuapina/ga-2021-2024-nibrs-dataset-from-fbi-gov/data)")
+    st.markdown("[Data & Sources](https://www.kaggle.com/datasets/joshuapina/core-atlanta-burglary-related-crimes-2021-2025)")
 with nav4:
     st.markdown("[Final Presentation](https://docs.google.com/presentation/d/1OrThUntGbi8fWF3Qqyw-xHaza5_X8Qha0KVonl19IV8/edit?slide=id.gc6f80d1ff_0_0#slide=id.gc6f80d1ff_0_0)")
 with nav5:
