@@ -33,4 +33,4 @@ services:
     volumes:
       - ./artifacts:/app/artifacts 
       - ./reports:/app/reports     
-    command: uvicorn api.api:app --host 0.0.0.0 --port 8000 --workers 1
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 1

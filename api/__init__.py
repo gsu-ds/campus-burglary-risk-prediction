@@ -1,2 +1,3 @@
-from api import models
-from api.utils import something
+from .main import app
+
+__all__ = ["app"]

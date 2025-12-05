@@ -34,8 +34,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy Streamlit app and configuration file
-# FIXED PATH: Copies from the subdirectory where streamlit_app.py is located.
-COPY streamlit_app/streamlit_app.py .
+COPY streamlit_app/app.py ./streamlit_app.py
 # config.py is correctly copied from the root.
 COPY config.py .
 
