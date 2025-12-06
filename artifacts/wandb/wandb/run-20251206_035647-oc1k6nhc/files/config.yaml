@@ -1,0 +1,65 @@
+_wandb:
+    value:
+        cli_version: 0.23.0
+        e:
+            bmazew95sbshw7nfe60v5pnzprxbx9zj:
+                cpu_count: 1
+                cpu_count_logical: 2
+                disk:
+                    /:
+                        total: "33636024320"
+                        used: "28860973056"
+                email: joshuadariuspina@gmail.com
+                executable: /workspaces/campus-burglary-risk-prediction/dsci_env/bin/python
+                git:
+                    commit: 306c4946a41b4a5ad4e3b2fed5798ca3b6f87225
+                    remote: https://github.com/gsu-ds/campus-burglary-risk-prediction.git
+                host: codespaces-398714
+                memory:
+                    total: "8330575872"
+                os: Linux-6.8.0-1030-azure-x86_64-with-glibc2.39
+                program: -m atl_model_pipelines.models.horizon_models
+                python: CPython 3.12.1
+                root: /workspaces/campus-burglary-risk-prediction/artifacts/wandb
+                startedAt: "2025-12-06T03:56:47.771897Z"
+                writerId: bmazew95sbshw7nfe60v5pnzprxbx9zj
+        m: []
+        python_version: 3.12.1
+        t:
+            "1":
+                - 5
+                - 6
+                - 53
+                - 105
+            "2":
+                - 5
+                - 6
+                - 53
+                - 105
+            "3":
+                - 2
+                - 13
+                - 15
+                - 16
+            "4": 3.12.1
+            "5": 0.23.0
+            "12": 0.23.0
+            "13": linux-x86_64
+cutoff:
+    value: "2024-01-01 00:00:00"
+horizons:
+    value:
+        - 1
+        - 2
+        - 3
+        - 6
+        - 12
+        - 24
+model_type:
+    value: MultiOutput XGBRegressor
+target:
+    value: hourly crime_count per NPU, forecasting counts 1, 2, 3, 6, 12, and 24 hours in the future for each selected NPU using 2020-2023 for training and 2024-2025 for testing
+test_range:
+    value: 2024-01-01 to 2025-12-31
+train_range:
+    value: 2020-01-01 to 2023-12-31
